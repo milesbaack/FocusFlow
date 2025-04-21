@@ -79,10 +79,12 @@ customization of the user experience.
 • Session counter
 
 ### Basic User Interface (3 days) Due May 12
-• Main dashboard
-• Task list view
-• Timer display
 
+• Main dashboard
+
+• Task list view
+
+• Timer display
 
 ## Backlog: High priority
 
