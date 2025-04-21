@@ -78,7 +78,7 @@ customization of the user experience.
 • Start/pause/reset functionality
 • Session counter
 
-### Basic User Interface (3 days) Due May 12t
+### Basic User Interface (3 days) Due May 12
 • Main dashboard
 • Task list view
 • Timer display
