@@ -63,59 +63,63 @@ customization of the user experience.
 
 
 ## Backlog: Must have features
-• Task Management System (4 days)
+
+### Task Management System (4 days) Due: May 12
+
 • Create, edit, delete tasks
+
 • Set task priorities
+
 • View task list
-• Due: May 12
-• Pomodoro Timer (3 days)
+
+
+### Pomodoro Timer (3 days) Due May 12
 • 25/5 minute work/break intervals
 • Start/pause/reset functionality
 • Session counter
-• Due: May 12
-• Basic User Interface (3 days)
+
+### Basic User Interface (3 days) Due May 12t
 • Main dashboard
 • Task list view
 • Timer display
-• Due: May 12
+
 
 ## Backlog: High priority
 
-### Basic Analytics (3 days)
+### Basic Analytics (3 days) Due: May 19
 1. Track completed tasks
 2. Record focus sessions
 3. Simple statistics display
-4. Due: May 19
 
-### Notification System (2 days)
+
+### Notification System (2 days) Due: May 19
 1. Timer alerts
 2. Break reminders
-3. Due: May 19
 
-### Data Persistence (2 days)
+### Data Persistence (2 days) Due: May 19
 1. Save tasks locally
 2. Store session history
-3. Due: May 19
+   
 
-## Basic Analytics (3 days)
+## Basic Analytics (3 days) Due: May 24
 
 1. Theme support (2 days)
 - Light/Dark mode
 - Basic color customization
-- Due: May 24
+
   
-2. Achievement system (3 days)
+2. Achievement system (3 days) 
 - Basic achievements
 - Progress tracking
-- Due: May 24
 
-## Backlog: Low priority
-1.Enhanced Task Features (2 days)
+
+## Backlog: Low priority Due: May 29
+1.Enhanced Task Features (2 days) 
 - Subtasks
 - Basic categories
-- Due: May 29
+
 2.Final Polish (3 days)
 - UI refinements
 - Bug fixes
 - Performance optimization
-- Due: May 29
+  
