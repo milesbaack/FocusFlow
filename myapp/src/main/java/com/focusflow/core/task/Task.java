@@ -44,6 +44,7 @@ public class Task implements Serializable{
      * @param title Task title
      */
     // TODO: Priority should be one of the inputs
+    // TODO: Select new time for task.
     public Task(String title){
         this.id = UUID.randomUUID();
         this.title = title;
@@ -93,46 +94,46 @@ public class Task implements Serializable{
         this.completed = completed;
     }
 
-// TODO: Java Doc for this ( ? ) 
-@Override
-public String toString() {
-    StringBuilder sb = new StringBuilder();
+    // TODO: Java Doc for this ( ? ) 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
 
-    // Append the task title
-    sb.append("Task: ").append(title);
+        // Append the task title
+        sb.append("Task: ").append(title);
 
-    // Append the description if present
-    if (description != null && !description.isEmpty()) {
-        sb.append("\nDescription: ").append(description);
-    }
-
-    // Append the priority
-    sb.append("\nPriority: ").append(priority);
-
-    // Append the completion status
-    sb.append("\nStatus: ").append(completed ? "Completed" : "Pending");
-
-    // Append the creation date
-    sb.append("\nCreated: ").append(creationDate);
-
-    // Append the due date if present
-    if (dueDate != null) {
-        sb.append("\nDue: ").append(dueDate);
-    }
-
-    // Append checklist items if any exist
-    if (checklistItems != null && !checklistItems.isEmpty()) {
-        sb.append("\nChecklist:");
-        for (int i = 0; i < checklistItems.size(); i++) {
-            ChecklistItem item = checklistItems.get(i);
-            // Format: 1. [x] Item text
-            sb.append(String.format("\n  %d. [%s] %s",
-                i + 1,
-                item.isChecked() ? "x" : " ",
-                item.getText()));
+        // Append the description if present
+        if (description != null && !description.isEmpty()) {
+            sb.append("\nDescription: ").append(description);
         }
-    }
 
-    return sb.toString();
-}
+        // Append the priority
+        sb.append("\nPriority: ").append(priority);
+
+        // Append the completion status
+        sb.append("\nStatus: ").append(completed ? "Completed" : "Pending");
+
+        // Append the creation date
+        sb.append("\nCreated: ").append(creationDate);
+
+        // Append the due date if present
+        if (dueDate != null) {
+            sb.append("\nDue: ").append(dueDate);
+        }
+
+        // Append checklist items if any exist
+        if (checklistItems != null && !checklistItems.isEmpty()) {
+            sb.append("\nChecklist:");
+            for (int i = 0; i < checklistItems.size(); i++) {
+                ChecklistItem item = checklistItems.get(i);
+                // Format: 1. [x] Item text
+                sb.append(String.format("\n  %d. [%s] %s",
+                    i + 1,
+                    item.isChecked() ? "x" : " ",
+                    item.getText()));
+            }
+        }
+
+        return sb.toString();
+    }
 }
