@@ -21,3 +21,6 @@ buildNumber.properties
 
 # ignore notes 
 notes/
+
+# App debug 
+AppDebug.java
