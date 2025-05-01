@@ -2,7 +2,7 @@
  * Pomodoro Timer class to handle countdown logic, start/pause/reset, and 
  * notification logging.
  * @author Emilio Lopez
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 // TODO: Refactor internal timer reset
@@ -11,7 +11,10 @@ package com.focusflow.core.timer;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import com.focusflow.core.session.SessionManager;
+
 public class PomodoroTimer {
+    private final SessionManager sessionManager;
     private long totalSeconds;
     private long secondsRemaining;
     private boolean running = false;
@@ -25,6 +28,7 @@ public class PomodoroTimer {
         this.totalSeconds = totalSeconds;
         this.secondsRemaining = totalSeconds;
         this.listener = listener;
+        this.sessionManager = new SessionManager();
     }
 
     /**
@@ -39,6 +43,10 @@ public class PomodoroTimer {
 
         // Else, start running
         running = true;
+
+        // TODO: Session ID when starting new session i.e. integrate with current task.
+        // Start new session
+        sessionManager.startSession(null);
 
         // Create new Timer instance
         timer = new Timer();
@@ -134,5 +142,7 @@ public class PomodoroTimer {
             timer.cancel();
             timer = null;
         }
+        // End current session
+        sessionManager.endCurrentSession();
     }
 }
