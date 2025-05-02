@@ -18,7 +18,7 @@ Our structure follows a common pattern in professional software development that
 Our project uses Maven, which is a tool that helps manage dependencies (libraries we use) and build our application. Maven projects follow a standard folder structure:
 
 ```
-focusflow/
+/home/mbaack/FocusFlow/FocusFlow/
 ├── src/
 │   ├── main/
 │   │   ├── java/          # All our Java code goes here
@@ -30,7 +30,7 @@ focusflow/
 Inside the `java` folder, we have our own organization system with these main folders:
 
 ```
-com.teamdijkstra.focusflow/
+com.focusflow/
 ├── application/
 ├── domain/
 ├── infrastructure/
