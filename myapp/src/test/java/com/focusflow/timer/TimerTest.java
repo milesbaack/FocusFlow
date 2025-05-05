@@ -6,131 +6,176 @@
 
 package  com.focusflow.timer;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.focusflow.core.timer.PomodoroTimer;
-import com.focusflow.core.timer.TimerListener;
+import com.focusflow.core.timer.Timer;
+import com.focusflow.core.timer.TimerEventListener;
+import com.focusflow.core.timer.TimerState;
+import com.focusflow.core.timer.TimerType;
 
-public class TimerTest{
-    // Create instances for Pomodoro and listener.
-    private PomodoroTimer timer;
+/**
+ * Test class for the Timer interface.
+ * 
+ * This class contains unit tests for verifying the functionality of the Timer interface,
+ * including state management, duration tracking, and event notifications.
+ * 
+ * @author Emilio Lopez
+ * @version 1.0.0
+ * @see com.focusflow.core.timer.Timer
+ */
+public class TimerTest {
+    private Timer timer;
     private TestTimerListener listener;
+    private static final String TEST_TASK_ID = "test-task-id";
 
-    /**
-     * Helper class to track timer events
-     */
-    private class TestTimerListener implements TimerListener{
-        public long lastTickValue;
-        public boolean finished;
-
-        @Override
-        public void onTick(long secondsRemaining){
-            lastTickValue = secondsRemaining;
-        }
-
-        @Override
-        public void onFinish(){
-            finished = true;
-        }
-    }
-
-    /**
-     * Establish setup for each test, initiating PomodoroTimer and Listener.
-     */
     @BeforeEach
-    public void setup(){
-        // Create instance of TestTimerListener
+    void setUp() {
+        timer = new PomodoroTimer(TimerType.WORK);
+        ((PomodoroTimer)timer).setCurrentTaskId(TEST_TASK_ID);
         listener = new TestTimerListener();
-
-        // Create instance of Pomodoro Timer with 10 second test
-        timer = new PomodoroTimer(10, listener);
+        timer.addListener(listener);
     }
 
-    /**
-     * Test initial state of the Timer
-     */
     @Test
-    public void testInitialState(){
-        assertEquals(10, timer.getSecondsRemaining());
-        assertFalse(timer.isRunning());
+    void testInitialState() {
+        assertEquals(TimerState.INACTIVE, timer.getState());
+        assertEquals(TimerType.WORK.getDefaultDuration(), timer.getRemainingTime());
+        assertEquals(0, timer.getElapsedTime());
     }
 
-    /**
-     * Test if timer starts correctly.
-     */
     @Test
-    public void testStartTimer(){
+    void testStartTimer() throws InterruptedException {
+        CountDownLatch startLatch = new CountDownLatch(1);
+        listener.setOnStartCallback(() -> startLatch.countDown());
+
         timer.start();
-        assertTrue(timer.isRunning());
+        assertTrue(startLatch.await(1, TimeUnit.SECONDS));
+        assertEquals(TimerState.RUNNING, timer.getState());
     }
 
-    /**
-     * Test if timer pauses correctly.
-     */
     @Test
-    public void testPauseTimer(){
+    void testPauseTimer() throws InterruptedException {
+        CountDownLatch pauseLatch = new CountDownLatch(1);
+        listener.setOnPauseCallback(() -> pauseLatch.countDown());
+
         timer.start();
+        Thread.sleep(100); // Let it run briefly
         timer.pause();
-        assertFalse(timer.isRunning());
+        
+        assertTrue(pauseLatch.await(1, TimeUnit.SECONDS));
+        assertEquals(TimerState.PAUSED, timer.getState());
+        assertTrue(timer.getElapsedTime() > 0);
     }
 
-    /**
-     * Test if timer resets correctly.
-     */
     @Test
-    public void testResetTimer(){
-        timer.start();
-        try {
-            // Delay by 2 seconds
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+    void testResumeTimer() throws InterruptedException {
+        CountDownLatch resumeLatch = new CountDownLatch(1);
+        listener.setOnResumeCallback(() -> resumeLatch.countDown());
 
+        timer.start();
+        Thread.sleep(100);
+        timer.pause();
+        Thread.sleep(100);
+        timer.resume();
+        
+        assertTrue(resumeLatch.await(1, TimeUnit.SECONDS));
+        assertEquals(TimerState.RUNNING, timer.getState());
+    }
+
+    @Test
+    void testStopTimer() throws InterruptedException {
+        CountDownLatch stopLatch = new CountDownLatch(1);
+        listener.setOnStopCallback(() -> stopLatch.countDown());
+
+        timer.start();
+        Thread.sleep(100);
+        timer.stop();
+        
+        assertTrue(stopLatch.await(1, TimeUnit.SECONDS));
+        assertEquals(TimerState.STOPPED, timer.getState());
+    }
+
+    @Test
+    void testResetTimer() throws InterruptedException {
+        CountDownLatch resetLatch = new CountDownLatch(1);
+        listener.setOnResetCallback(() -> resetLatch.countDown());
+
+        timer.start();
+        Thread.sleep(100);
         timer.reset();
-        assertEquals(10, timer.getSecondsRemaining());
-        assertFalse(timer.isRunning());
+        
+        assertTrue(resetLatch.await(1, TimeUnit.SECONDS));
+        assertEquals(TimerState.INACTIVE, timer.getState());
+        assertEquals(0, timer.getElapsedTime());
+        assertEquals(TimerType.WORK.getDefaultDuration(), timer.getRemainingTime());
     }
 
-    /**
-     * Test timer tick
-     */
     @Test
-    public void testTimerTick(){
-        timer.start();
-        try {
-            Thread.sleep(2000);
-        } catch ( InterruptedException e) {
-            e.printStackTrace();
-        }
+    void testTimerTickEvents() throws InterruptedException {
+        CountDownLatch tickLatch = new CountDownLatch(3);
+        listener.setOnTickCallback(() -> tickLatch.countDown());
 
-        assertTrue(timer.getSecondsRemaining() < 10);
+        timer.start();
+        assertTrue(tickLatch.await(4, TimeUnit.SECONDS));
     }
 
-    /**
-     * Test Listener Notification system
-     */
-    @Test
-    public void testListenerNotification(){
-        // Create 2 second timer
-        timer = new PomodoroTimer(2, listener);
-        timer.start();
+    private static class TestTimerListener implements TimerEventListener {
+        private Runnable onStartCallback;
+        private Runnable onPauseCallback;
+        private Runnable onResumeCallback;
+        private Runnable onStopCallback;
+        private Runnable onResetCallback;
+        private Runnable onCompleteCallback;
+        private Runnable onTickCallback;
 
-        // Tick occurs every SECOND i.e. you can establish how you
-        // update secondsRemaining if you need greater precision.
-        try {
-            // Let more than 2 seconds pass
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        void setOnStartCallback(Runnable callback) { this.onStartCallback = callback; }
+        void setOnPauseCallback(Runnable callback) { this.onPauseCallback = callback; }
+        void setOnResumeCallback(Runnable callback) { this.onResumeCallback = callback; }
+        void setOnStopCallback(Runnable callback) { this.onStopCallback = callback; }
+        void setOnResetCallback(Runnable callback) { this.onResetCallback = callback; }
+        void setOnCompleteCallback(Runnable callback) { this.onCompleteCallback = callback; }
+        void setOnTickCallback(Runnable callback) { this.onTickCallback = callback; }
+
+        @Override
+        public void onTimerStarted(Timer timer) {
+            if (onStartCallback != null) onStartCallback.run();
         }
-        
-        // Check if timer is finsihed ( more than 2 seconds passed. )
-        assertTrue(listener.finished);
-        
+
+        @Override
+        public void onTimerPaused(Timer timer) {
+            if (onPauseCallback != null) onPauseCallback.run();
+        }
+
+        @Override
+        public void onTimerResumed(Timer timer) {
+            if (onResumeCallback != null) onResumeCallback.run();
+        }
+
+        @Override
+        public void onTimerStopped(Timer timer) {
+            if (onStopCallback != null) onStopCallback.run();
+        }
+
+        @Override
+        public void onTimerReset(Timer timer) {
+            if (onResetCallback != null) onResetCallback.run();
+        }
+
+        @Override
+        public void onTimerCompleted(Timer timer) {
+            if (onCompleteCallback != null) onCompleteCallback.run();
+        }
+
+        @Override
+        public void onTimerTick(Timer timer, int remainingSeconds) {
+            if (onTickCallback != null) onTickCallback.run();
+        }
     }
 }
