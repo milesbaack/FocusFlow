@@ -8,141 +8,261 @@
 // TODO: Refactor internal timer reset
 package com.focusflow.core.timer;
 
-import java.util.Timer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.focusflow.core.session.SessionManager;
 
-public class PomodoroTimer {
+/**
+ * Implementation of a Pomodoro technique timer.
+ * 
+ * This class provides a complete implementation of the Pomodoro technique timer,
+ * supporting work sessions, short breaks, and long breaks. It includes event-based
+ * notification system and full state management.
+ * 
+ * @author Miles Baack
+ * @version 1.0
+ * @see com.focusflow.core.timer.Timer
+ * @see com.focusflow.core.timer.TimerEventListener
+ */
+public class PomodoroTimer implements Timer {
+    private final List<TimerEventListener> listeners = new ArrayList<>();
+    private final TimerType type;
+    private final int duration;
+    private final AtomicInteger remainingSeconds;
+    private TimerState state = TimerState.INACTIVE;
+    private java.util.Timer internalTimer;
+    private long startTime;
+    private long pauseTime;
+    private long elapsedTime;
     private final SessionManager sessionManager;
-    private long totalSeconds;
-    private long secondsRemaining;
-    private boolean running = false;
-    private TimerListener listener;
-    private Timer timer;
-
+    private String currentTaskId;
+    
     /**
-     * Default constructor
+     * Creates a new PomodoroTimer with the specified type.
+     * 
+     * @param type the type of timer to create
      */
-    public PomodoroTimer(long totalSeconds, TimerListener listener){
-        this.totalSeconds = totalSeconds;
-        this.secondsRemaining = totalSeconds;
-        this.listener = listener;
+    public PomodoroTimer(TimerType type) {
+        this(type, type.getDefaultDuration());
+    }
+    
+    /**
+     * Creates a new PomodoroTimer with the specified type and duration.
+     * 
+     * @param type the type of timer to create
+     * @param duration the duration in seconds
+     */
+    public PomodoroTimer(TimerType type, int duration) {
+        this.type = type;
+        this.duration = duration;
+        this.remainingSeconds = new AtomicInteger(duration);
         this.sessionManager = new SessionManager();
     }
-
+    
     /**
-     * Start or resume timer countdown. Contains anonymous function to handle countdown logic.
+     * Sets the current task ID for session tracking.
+     * 
+     * @param taskId the ID of the current task
      */
-    public void start(){
-        // If already running, do nothing
-        // TODO: Fix redundant return
-        if(running){
+    public void setCurrentTaskId(String taskId) {
+        this.currentTaskId = taskId;
+    }
+    
+    @Override
+    public void start() {
+        if (state == TimerState.RUNNING) {
             return;
         }
-
-        // Else, start running
-        running = true;
-
-        // TODO: Session ID when starting new session i.e. integrate with current task.
+        
+        if (state == TimerState.PAUSED) {
+            resume();
+            return;
+        }
+        
+        state = TimerState.RUNNING;
+        startTime = System.currentTimeMillis();
+        internalTimer = new java.util.Timer();
+        
         // Start new session
-        sessionManager.startSession(null);
-
-        // Create new Timer instance
-        timer = new Timer();
-
-        // Start running
-        // Used Timer documentation from Oracle
-        // Anonymous function allows access to timer's private fields ( also just one task :p)
-        timer.scheduleAtFixedRate(new TimerTask() {
-            // Setup anonymous TimerTask for countdown logic
+        sessionManager.startSession(currentTaskId);
+        
+        internalTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
-            public void run(){
-                if(secondsRemaining > 0){
-                    // Decrease time by 1 second.
-                    secondsRemaining--;
-
-                    // Notify listener of new time value
-                    if(listener != null){
-                        listener.onTick(secondsRemaining);
-                    }
-                }
-
-                else{
-                    // Stop timer
-                    running = false;
-                    if(timer != null){
-                        timer.cancel();
-                        timer = null;
-                    }
-
-                    // Update listener
-                    if (listener != null){
-                        listener.onFinish();
-                    }
+            public void run() {
+                int remaining = remainingSeconds.decrementAndGet();
+                notifyTick(remaining);
+                
+                if (remaining <= 0) {
+                    complete();
                 }
             }
-        }, 1000, 1000); // Delay by 1 seconds and repeat every second.
+        }, 0, 1000);
+        
+        notifyStarted();
     }
-
-    /**
-     * Pause timer to current time
-     */
-    public void pause(){
-        // If already paused, exit
-        if(!running){
+    
+    @Override
+    public void pause() {
+        if (state != TimerState.RUNNING) {
             return;
         }
-        // Change timer status
-        running = false;
-
-        if(timer != null){
-            timer.cancel();
+        
+        state = TimerState.PAUSED;
+        pauseTime = System.currentTimeMillis();
+        internalTimer.cancel();
+        internalTimer = null;
+        
+        notifyPaused();
+    }
+    
+    @Override
+    public void resume() {
+        if (state != TimerState.PAUSED) {
+            return;
         }
+        
+        state = TimerState.RUNNING;
+        long pauseDuration = System.currentTimeMillis() - pauseTime;
+        startTime += pauseDuration;
+        
+        internalTimer = new java.util.Timer();
+        internalTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                int remaining = remainingSeconds.decrementAndGet();
+                notifyTick(remaining);
+                
+                if (remaining <= 0) {
+                    complete();
+                }
+            }
+        }, 0, 1000);
+        
+        notifyResumed();
     }
-
-    /**
-     * Reset timer to intial duration
-     */
-    public void reset(){
-        // Pause clock
-        pause();
-
-        // Reset seconds remaining
-        secondsRemaining = totalSeconds;
-
-        // Reset listener
-        if(listener != null){
-            listener.onTick(secondsRemaining);
+    
+    @Override
+    public void stop() {
+        if (state == TimerState.INACTIVE || state == TimerState.STOPPED) {
+            return;
         }
-    }
-
-    /**
-     * Check if timer is running
-     * @return {@code true} if timer is running; {@code false} otherwise
-     */
-    public boolean isRunning(){
-        return running;
-    }
-
-    /**
-     * Get remaining time in seconds
-     * @return number of seconds remaining
-     */
-    public long getSecondsRemaining(){
-        return secondsRemaining;
-    }
-
-    /**
-     * Stop timer and reset timer instance.
-     */
-    private void stop(){
-        running = false;
-        if ( timer != null){
-            timer.cancel();
-            timer = null;
+        
+        state = TimerState.STOPPED;
+        if (internalTimer != null) {
+            internalTimer.cancel();
+            internalTimer = null;
         }
+        
         // End current session
         sessionManager.endCurrentSession();
+        
+        notifyStopped();
+    }
+    
+    @Override
+    public void reset() {
+        stop();
+        state = TimerState.INACTIVE;
+        remainingSeconds.set(duration);
+        elapsedTime = 0;
+        
+        notifyReset();
+    }
+    
+    @Override
+    public long getElapsedTime() {
+        if (state == TimerState.INACTIVE) {
+            return 0;
+        }
+        
+        if (state == TimerState.PAUSED) {
+            return pauseTime - startTime;
+        }
+        
+        return System.currentTimeMillis() - startTime;
+    }
+    
+    @Override
+    public int getRemainingTime() {
+        return remainingSeconds.get();
+    }
+    
+    @Override
+    public TimerState getState() {
+        return state;
+    }
+    
+    @Override
+    public TimerType getType() {
+        return type;
+    }
+    
+    @Override
+    public void addListener(TimerEventListener listener) {
+        listeners.add(listener);
+    }
+    
+    @Override
+    public void removeListener(TimerEventListener listener) {
+        listeners.remove(listener);
+    }
+    
+    private void complete() {
+        state = TimerState.COMPLETED;
+        if (internalTimer != null) {
+            internalTimer.cancel();
+            internalTimer = null;
+        }
+        elapsedTime = duration * 1000;
+        
+        // End current session
+        sessionManager.endCurrentSession();
+        
+        notifyCompleted();
+    }
+    
+    private void notifyStarted() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerStarted(this);
+        }
+    }
+    
+    private void notifyPaused() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerPaused(this);
+        }
+    }
+    
+    private void notifyResumed() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerResumed(this);
+        }
+    }
+    
+    private void notifyCompleted() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerCompleted(this);
+        }
+    }
+    
+    private void notifyStopped() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerStopped(this);
+        }
+    }
+    
+    private void notifyTick(int remainingSeconds) {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerTick(this, remainingSeconds);
+        }
+    }
+    
+    private void notifyReset() {
+        for (TimerEventListener listener : listeners) {
+            listener.onTimerReset(this);
+        }
     }
 }
