@@ -5,7 +5,8 @@
  * It implements the TimerEventListener interface to receive and display
  * timer events in a human-readable format.
  * 
- * @author Miles Baack
+ * @author Emilio Lopez
+ *
  * @version 1.1
  */
 
