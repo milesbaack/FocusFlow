@@ -1,55 +1,91 @@
 /**
- * Checklist class to store subtasks  / checklist
- * @author Emilio Lopez
- * @version 1.0
+ * Represents an item in a task's checklist.
+ * 
+ * This class implements Serializable to support persistence and implements
+ * proper equals/hashCode for collection operations.
+ * 
+ * @author Miles Baack
+ * @version 1.1
  */
 
 package com.focusflow.core.task;
 
 import java.io.Serializable;
+import java.util.Objects;
 
-public class ChecklistItem implements Serializable{
+public class ChecklistItem implements Serializable {
     private String text;
-    private boolean isChecked;
+    private boolean checked;
 
     /**
-     * Public constructor for ChecklistItem
-     * @param text String containing subtask
+     * Creates a new checklist item with the specified text.
+     * 
+     * @param text The text content of the checklist item
      */
-    public ChecklistItem(String text){
+    public ChecklistItem(String text) {
         this.text = text;
-        this.isChecked = false;
-    }
-
-    // TODO: Fix description
-    /**
-     * Toggle subtask checkmark ( negates checkmark )
-     */
-    public void toggleChecked(){
-        this.isChecked = !this.isChecked;
+        this.checked = false;
     }
 
     /**
-     * Get text
+     * Toggles the checked state of this item.
+     * If checked, becomes unchecked and vice versa.
      */
-    public String getText(){
+    public void toggleChecked() {
+        this.checked = !this.checked;
+    }
+
+    /**
+     * Gets the text content of this checklist item.
+     * 
+     * @return The text content
+     */
+    public String getText() {
         return text;
     }
 
     /**
-     * Set text
-     * @param text Text to be added
+     * Sets the text content of this checklist item.
+     * 
+     * @param text The new text content
      */
-    public void setText(String text){
+    public void setText(String text) {
         this.text = text;
     }
 
-    // TODO: Fix comments
     /**
-     * Get boolean value of isChecked
-     * @return {@code true} if subtask is checked; {@code false} otherwise
+     * Checks if this item is marked as completed.
+     * 
+     * @return true if the item is checked, false otherwise
      */
-    public boolean isChecked(){
-        return isChecked;
+    public boolean isChecked() {
+        return checked;
+    }
+
+    /**
+     * Sets the checked state of this item.
+     * 
+     * @param checked The new checked state
+     */
+    public void setChecked(boolean checked) {
+        this.checked = checked;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        ChecklistItem that = (ChecklistItem) obj;
+        return checked == that.checked && Objects.equals(text, that.text);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(text, checked);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[%s] %s", checked ? "x" : " ", text);
     }
 }
