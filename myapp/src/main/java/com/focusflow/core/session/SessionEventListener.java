@@ -1,5 +1,7 @@
 package com.focusflow.core.session;
 
+import com.focusflow.core.session.FocusSession;
+
 import java.util.List;
 
 /**

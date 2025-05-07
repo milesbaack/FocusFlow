@@ -1,14 +1,3 @@
-/**
- * Manages focus sessions and their history.
- * 
- * This class is responsible for creating, tracking, and managing focus sessions.
- * It maintains a history of all sessions and provides methods to query and filter
- * sessions based on various criteria.
- * 
- * @author Emilio Lopez
- * @version 1.1.0
- */
-
 package com.focusflow.core.session;
 
 import java.util.ArrayList;
@@ -16,10 +5,59 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class SessionManager{
+/**
+ * Manages focus sessions and their history.
+ * 
+ * This class is responsible for creating, tracking, and managing focus sessions.
+ * It maintains a history of all sessions and provides methods to query and filter
+ * sessions based on various criteria.
+ */
+public class SessionManager {
     private final List<FocusSession> sessionHistory = new ArrayList<>();
     private final List<SessionEventListener> listeners = new ArrayList<>();
     private FocusSession currentSession;
+    private FocusSession lastCompletedSession;
+    
+    // Configurable break durations and tolerance
+    private int shortBreakMinutes = 5;
+    private int longBreakMinutes = 15;
+    private int breakToleranceMinutes = 2;
+
+    /**
+     * Sets the duration for short breaks.
+     * 
+     * @param minutes The short break duration in minutes
+     */
+    public void setShortBreakMinutes(int minutes) {
+        if (minutes <= 0) {
+            throw new IllegalArgumentException("Break duration must be positive");
+        }
+        this.shortBreakMinutes = minutes;
+    }
+
+    /**
+     * Sets the duration for long breaks.
+     * 
+     * @param minutes The long break duration in minutes
+     */
+    public void setLongBreakMinutes(int minutes) {
+        if (minutes <= 0) {
+            throw new IllegalArgumentException("Break duration must be positive");
+        }
+        this.longBreakMinutes = minutes;
+    }
+
+    /**
+     * Sets the tolerance for break timing.
+     * 
+     * @param minutes The tolerance in minutes
+     */
+    public void setBreakToleranceMinutes(int minutes) {
+        if (minutes < 0) {
+            throw new IllegalArgumentException("Tolerance cannot be negative");
+        }
+        this.breakToleranceMinutes = minutes;
+    }
 
     /**
      * Adds a listener to receive session events.
@@ -52,8 +90,33 @@ public class SessionManager{
         }
 
         currentSession = new FocusSession(associatedTaskId);
+        
+        // Check if this session should be marked as consecutive
+        if (lastCompletedSession != null) {
+            // Determine if this should use a short or long break duration
+            int breakDuration = shouldUseShortBreak() ? shortBreakMinutes : longBreakMinutes;
+            
+            // Mark as consecutive if it follows a scheduled break
+            currentSession.markAsConsecutiveSession(
+                lastCompletedSession.getEndTime(),
+                breakDuration,
+                breakToleranceMinutes
+            );
+        }
+        
         notifySessionStarted(currentSession);
         return currentSession;
+    }
+
+    /**
+     * Determines if a short break should be used based on session history.
+     * Override this method to implement custom logic for short/long breaks.
+     * 
+     * @return true if a short break should be used, false for a long break
+     */
+    protected boolean shouldUseShortBreak() {
+        // Default implementation: use short break if less than 4 consecutive sessions
+        return getConsecutiveSessionsCount() % 4 != 0;
     }
 
     /**
@@ -93,6 +156,7 @@ public class SessionManager{
         }
         currentSession.endSession();
         sessionHistory.add(currentSession);
+        lastCompletedSession = currentSession;  // Track the last completed session
         notifySessionEnded(currentSession);
         notifySessionHistoryChanged(sessionHistory);
         currentSession = null;
@@ -103,7 +167,7 @@ public class SessionManager{
      * 
      * @return An Optional containing the current session if one exists
      */
-    public Optional<FocusSession> getCurrentSession(){
+    public Optional<FocusSession> getCurrentSession() {
         return Optional.ofNullable(currentSession);
     }
 
@@ -112,7 +176,7 @@ public class SessionManager{
      * 
      * @return A list of all sessions, ordered by start time
      */
-    public List<FocusSession> getSessionHistory(){
+    public List<FocusSession> getSessionHistory() {
         return new ArrayList<>(sessionHistory);
     }
 
@@ -138,6 +202,17 @@ public class SessionManager{
         return getSessionsForTask(taskId).stream()
             .mapToLong(FocusSession::getDurationSeconds)
             .sum();
+    }
+
+    /**
+     * Gets the count of consecutive sessions in the history.
+     * 
+     * @return The number of consecutive sessions
+     */
+    public int getConsecutiveSessionsCount() {
+        return (int) sessionHistory.stream()
+            .filter(FocusSession::isConsecutive)
+            .count();
     }
 
     private void notifySessionStarted(FocusSession session) {

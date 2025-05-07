@@ -1,11 +1,3 @@
-/**
- * Focus session manager for Pomodoro Timer
- * @author Emilio Lopez
- * @version 1.1.0
- */
-
-package  com.focusflow.core.session;
-
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -16,7 +8,8 @@ import java.util.UUID;
  * This class tracks the duration and state of a focus session,
  * including start and end times, pauses, and completion status.
  */
-public class FocusSession implements Serializable{
+public class FocusSession implements Serializable {
+   
     private final UUID id;
     private final LocalDateTime startTime;
     private LocalDateTime endTime;
@@ -26,6 +19,7 @@ public class FocusSession implements Serializable{
     private final String associatedTaskId;
     private boolean completed;
     private boolean paused;
+    private boolean isConsecutiveSession;
 
     /**
      * Creates a new focus session for a task.
@@ -33,7 +27,7 @@ public class FocusSession implements Serializable{
      * @param associatedTaskId The ID of the task this session is for
      * @throws IllegalArgumentException if the task ID is null or empty
      */
-    public FocusSession(String associatedTaskId){
+    public FocusSession(String associatedTaskId) {
         if (associatedTaskId == null || associatedTaskId.trim().isEmpty()) {
             throw new IllegalArgumentException("Task ID cannot be null or empty");
         }
@@ -43,6 +37,7 @@ public class FocusSession implements Serializable{
         this.completed = false;
         this.paused = false;
         this.pausedDurationSeconds = 0;
+        this.isConsecutiveSession = false;
     }
 
     /**
@@ -82,7 +77,7 @@ public class FocusSession implements Serializable{
      * 
      * @throws IllegalStateException if the session is already completed
      */
-    public void endSession(){
+    public void endSession() {
         if (completed) {
             throw new IllegalStateException("Session is already completed");
         }
@@ -96,7 +91,7 @@ public class FocusSession implements Serializable{
      * 
      * @return The session's UUID
      */
-    public UUID getId(){
+    public UUID getId() {
         return id;
     }
 
@@ -105,7 +100,7 @@ public class FocusSession implements Serializable{
      * 
      * @return The session start time
      */
-    public LocalDateTime getStartTime(){
+    public LocalDateTime getStartTime() {
         return startTime;
     }
 
@@ -114,7 +109,7 @@ public class FocusSession implements Serializable{
      * 
      * @return The session end time, or null if the session is still active
      */
-    public LocalDateTime getEndTime(){
+    public LocalDateTime getEndTime() {
         return endTime;
     }
 
@@ -123,7 +118,7 @@ public class FocusSession implements Serializable{
      * 
      * @return The session duration in seconds
      */
-    public long getDurationSeconds(){
+    public long getDurationSeconds() {
         return durationSeconds;
     }
 
@@ -132,7 +127,7 @@ public class FocusSession implements Serializable{
      * 
      * @return The associated task ID
      */
-    public String getAssociatedTaskId(){
+    public String getAssociatedTaskId() {
         return associatedTaskId;
     }
 
@@ -141,7 +136,7 @@ public class FocusSession implements Serializable{
      * 
      * @return true if the session is completed, false otherwise
      */
-    public boolean isCompleted(){
+    public boolean isCompleted() {
         return completed;
     }
 
@@ -161,5 +156,45 @@ public class FocusSession implements Serializable{
      */
     public long getPausedDurationSeconds() {
         return pausedDurationSeconds;
+    }
+
+    /**
+     * Checks if this session is consecutive (follows a scheduled break).
+     * 
+     * @return true if this is a consecutive session, false otherwise
+     */
+    public boolean isConsecutive() {
+        return isConsecutiveSession;
+    }
+
+    /**
+     * Marks this session as consecutive, indicating it follows a previous session and break.
+     * 
+     * @param previousSessionEndTime The end time of the previous session
+     * @param breakDurationMinutes The expected break duration in minutes
+     * @param toleranceMinutes Allowed tolerance in minutes (earlier or later than expected)
+     * @return true if successfully marked as consecutive, false otherwise
+     */
+    public boolean markAsConsecutiveSession(LocalDateTime previousSessionEndTime, 
+                                           int breakDurationMinutes, 
+                                           int toleranceMinutes) {
+        // If already marked as consecutive or missing previous session info
+        if (isConsecutiveSession || previousSessionEndTime == null) {
+            return isConsecutiveSession;
+        }
+        
+        // Calculate expected start time after the break
+        LocalDateTime expectedStartTime = previousSessionEndTime.plusMinutes(breakDurationMinutes);
+        
+        // Calculate the difference between actual and expected start times
+        long diffMinutes = Math.abs(java.time.Duration.between(expectedStartTime, this.startTime).toMinutes());
+        
+        // Session is consecutive if started within tolerance of expected time
+        if (diffMinutes <= toleranceMinutes) {
+            this.isConsecutiveSession = true;
+            return true;
+        }
+        
+        return false;
     }
 }
