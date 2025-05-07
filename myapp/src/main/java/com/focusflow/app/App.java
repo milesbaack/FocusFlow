@@ -50,8 +50,8 @@ import javafx.stage.Stage;
  * integrating the timer, task management, session tracking features, and
  * gamification elements.
  * 
- * @author Emilio Lopez
- * @version 1.1.0
+ * @author Emilio Lopez & Miles Baack
+ * @version 1.2.0
  */
 public class App extends Application {
     private PomodoroTimer timer;
