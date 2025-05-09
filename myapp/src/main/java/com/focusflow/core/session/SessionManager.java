@@ -11,12 +11,15 @@
 
 package com.focusflow.core.session;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class SessionManager{
+import com.focusflow.core.timer.TimerType;
+
+public class SessionManager {
     private final List<FocusSession> sessionHistory = new ArrayList<>();
     private final List<SessionEventListener> listeners = new ArrayList<>();
     private FocusSession currentSession;
@@ -42,16 +45,20 @@ public class SessionManager{
     /**
      * Starts a new focus session associated with a task.
      * 
-     * @param associatedTaskId The ID of the task to associate with the session
+     * @param taskId The ID of the task to associate with the session
      * @return The newly created focus session
      * @throws IllegalArgumentException if the task ID is null or empty
      */
-    public FocusSession startSession(String associatedTaskId) {
-        if (associatedTaskId == null || associatedTaskId.trim().isEmpty()) {
+    public FocusSession startSession(String taskId) {
+        if (taskId == null || taskId.trim().isEmpty()) {
             throw new IllegalArgumentException("Task ID cannot be null or empty");
         }
 
-        currentSession = new FocusSession(associatedTaskId);
+        if (currentSession != null) {
+            throw new IllegalStateException("A session is already in progress");
+        }
+
+        currentSession = new FocusSession(taskId, LocalDateTime.now(), null, TimerType.WORK);
         notifySessionStarted(currentSession);
         return currentSession;
     }
@@ -65,7 +72,13 @@ public class SessionManager{
         if (currentSession == null) {
             throw new IllegalStateException("No active session to pause");
         }
-        currentSession.pauseSession();
+        // Create a new session with paused state
+        currentSession = new FocusSession(
+            currentSession.getTaskId(),
+            currentSession.getStartTime(),
+            LocalDateTime.now(),
+            currentSession.getType()
+        );
         notifySessionPaused(currentSession);
     }
 
@@ -78,7 +91,13 @@ public class SessionManager{
         if (currentSession == null) {
             throw new IllegalStateException("No active session to resume");
         }
-        currentSession.resumeSession();
+        // Create a new session with resumed state
+        currentSession = new FocusSession(
+            currentSession.getTaskId(),
+            LocalDateTime.now(),
+            null,
+            currentSession.getType()
+        );
         notifySessionResumed(currentSession);
     }
 
@@ -91,7 +110,12 @@ public class SessionManager{
         if (currentSession == null) {
             throw new IllegalStateException("No active session to end");
         }
-        currentSession.endSession();
+        currentSession = new FocusSession(
+            currentSession.getTaskId(),
+            currentSession.getStartTime(),
+            LocalDateTime.now(),
+            currentSession.getType()
+        );
         sessionHistory.add(currentSession);
         notifySessionEnded(currentSession);
         notifySessionHistoryChanged(sessionHistory);
@@ -103,7 +127,7 @@ public class SessionManager{
      * 
      * @return An Optional containing the current session if one exists
      */
-    public Optional<FocusSession> getCurrentSession(){
+    public Optional<FocusSession> getCurrentSession() {
         return Optional.ofNullable(currentSession);
     }
 
@@ -112,7 +136,7 @@ public class SessionManager{
      * 
      * @return A list of all sessions, ordered by start time
      */
-    public List<FocusSession> getSessionHistory(){
+    public List<FocusSession> getSessionHistory() {
         return new ArrayList<>(sessionHistory);
     }
 
@@ -124,7 +148,7 @@ public class SessionManager{
      */
     public List<FocusSession> getSessionsForTask(String taskId) {
         return sessionHistory.stream()
-            .filter(session -> session.getAssociatedTaskId().equals(taskId))
+            .filter(session -> session.getTaskId().equals(taskId))
             .collect(Collectors.toList());
     }
 
