@@ -10,6 +10,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.focusflow.core.timer.TimerType;
+
 /**
  * Represents a single focus session for a task.
  * 
@@ -18,77 +20,35 @@ import java.util.UUID;
  */
 public class FocusSession implements Serializable{
     private final UUID id;
+    private final String taskId;
     private final LocalDateTime startTime;
-    private LocalDateTime endTime;
-    private LocalDateTime lastPauseTime;
-    private long durationSeconds;
-    private long pausedDurationSeconds;
-    private final String associatedTaskId;
-    private boolean completed;
-    private boolean paused;
+    private final LocalDateTime endTime;
+    private final int durationSeconds;
+    private final TimerType type;
+    private final boolean completed;
+    private final boolean paused;
+    private final int pausedDurationSeconds;
 
     /**
      * Creates a new focus session for a task.
      * 
-     * @param associatedTaskId The ID of the task this session is for
+     * @param taskId The ID of the task this session is for
      * @throws IllegalArgumentException if the task ID is null or empty
      */
-    public FocusSession(String associatedTaskId){
-        if (associatedTaskId == null || associatedTaskId.trim().isEmpty()) {
+    public FocusSession(String taskId, LocalDateTime startTime, LocalDateTime endTime, TimerType type) {
+        if (taskId == null || taskId.trim().isEmpty()) {
             throw new IllegalArgumentException("Task ID cannot be null or empty");
         }
         this.id = UUID.randomUUID();
-        this.startTime = LocalDateTime.now();
-        this.associatedTaskId = associatedTaskId;
+        this.taskId = taskId;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.durationSeconds = endTime != null ? 
+            (int) java.time.Duration.between(startTime, endTime).getSeconds() : 0;
+        this.type = type;
         this.completed = false;
         this.paused = false;
         this.pausedDurationSeconds = 0;
-    }
-
-    /**
-     * Pauses the current session.
-     * 
-     * @throws IllegalStateException if the session is already paused or completed
-     */
-    public void pauseSession() {
-        if (paused) {
-            throw new IllegalStateException("Session is already paused");
-        }
-        if (completed) {
-            throw new IllegalStateException("Cannot pause a completed session");
-        }
-        lastPauseTime = LocalDateTime.now();
-        paused = true;
-    }
-
-    /**
-     * Resumes a paused session.
-     * 
-     * @throws IllegalStateException if the session is not paused or is completed
-     */
-    public void resumeSession() {
-        if (!paused) {
-            throw new IllegalStateException("Session is not paused");
-        }
-        if (completed) {
-            throw new IllegalStateException("Cannot resume a completed session");
-        }
-        pausedDurationSeconds += java.time.Duration.between(lastPauseTime, LocalDateTime.now()).getSeconds();
-        paused = false;
-    }
-
-    /**
-     * Ends the current session.
-     * 
-     * @throws IllegalStateException if the session is already completed
-     */
-    public void endSession(){
-        if (completed) {
-            throw new IllegalStateException("Session is already completed");
-        }
-        this.endTime = LocalDateTime.now();
-        this.durationSeconds = java.time.Duration.between(startTime, endTime).getSeconds() - pausedDurationSeconds;
-        this.completed = true;
     }
 
     /**
@@ -98,6 +58,15 @@ public class FocusSession implements Serializable{
      */
     public UUID getId(){
         return id;
+    }
+
+    /**
+     * Gets the ID of the task associated with this session.
+     * 
+     * @return The associated task ID
+     */
+    public String getTaskId(){
+        return taskId;
     }
 
     /**
@@ -123,17 +92,8 @@ public class FocusSession implements Serializable{
      * 
      * @return The session duration in seconds
      */
-    public long getDurationSeconds(){
+    public int getDurationSeconds(){
         return durationSeconds;
-    }
-
-    /**
-     * Gets the ID of the task associated with this session.
-     * 
-     * @return The associated task ID
-     */
-    public String getAssociatedTaskId(){
-        return associatedTaskId;
     }
 
     /**
@@ -159,7 +119,11 @@ public class FocusSession implements Serializable{
      * 
      * @return The paused duration in seconds
      */
-    public long getPausedDurationSeconds() {
+    public int getPausedDurationSeconds() {
         return pausedDurationSeconds;
+    }
+
+    public TimerType getType() {
+        return type;
     }
 }
