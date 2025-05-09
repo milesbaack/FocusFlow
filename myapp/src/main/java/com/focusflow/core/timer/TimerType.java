@@ -30,7 +30,12 @@ public enum TimerType {
     /**
      * A custom timer with user-defined duration.
      */
-    CUSTOM(0);
+    CUSTOM(0),
+    
+    /**
+     * A break timer, typically 5 minutes.
+     */
+    BREAK(5 * 60);
     
     private final int defaultDuration;
     
