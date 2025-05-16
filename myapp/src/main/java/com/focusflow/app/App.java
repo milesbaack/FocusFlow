@@ -1,12 +1,16 @@
 package com.focusflow.app;
 
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.HashSet;
 
-import com.focusflow.core.notification.Notification;
-import com.focusflow.core.notification.NotificationListener;
-import com.focusflow.core.notification.NotificationManager;
-import com.focusflow.core.notification.NotificationType;
+import com.focusflow.core.gameify.Achievement;
+import com.focusflow.core.gameify.AchievementManager;
+import com.focusflow.core.gameify.GameifySystem;
+import com.focusflow.core.gameify.Quest;
+import com.focusflow.core.gameify.QuestManager;
+import com.focusflow.core.gameify.XpManager;
 import com.focusflow.core.session.FocusSession;
 import com.focusflow.core.session.SessionManager;
 import com.focusflow.core.task.Task;
@@ -26,28 +30,32 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Separator;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.control.TitledPane;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
 /**
  * Main application class for FocusFlow.
  * 
  * This class implements the main user interface for the FocusFlow application,
- * integrating the timer, task management, and session tracking features.
+ * integrating the timer, task management, session tracking features, and
+ * gamification elements.
  * 
- * @author Emilio Lopez
- * @version 1.0.0
+ * @author Emilio Lopez & Miles Baack
+ * @version 1.2.0
  */
 public class App extends Application {
-    private volatile PomodoroTimer timer;
+    private PomodoroTimer timer;
     private SessionManager sessionManager;
-    private NotificationManager notificationManager;
     private Task currentTask;
     private ListView<Task> taskListView;
     private TextField taskNameField;
@@ -62,78 +70,136 @@ public class App extends Application {
     private CheckBox taskComplete;
     private Label currentTaskLabel;
     private Label sessionStatusLabel;
-    private ListView<Notification> notificationListView;
-    private TitledPane notificationPane;
-    private TitledPane sessionHistoryPane;
-    private final AtomicReference<TimerType> currentTimerType = new AtomicReference<>(TimerType.WORK);
+
+    // Gamification components
+    private AchievementManager achievementManager;
+    private XpManager xpManager;
+    private QuestManager questManager;
+    private GameifySystem gameifySystem;
+
+    // Gamification UI elements
+    private Label levelLabel;
+    private ProgressBar xpProgressBar;
+    private Label xpLabel;
+    private ListView<Achievement> achievementsListView;
+    private ListView<Quest> questsListView;
+    private Button createQuestButton;
+    private TextField questNameField;
+    private TextArea questDescriptionField;
+    private Label currentQuestLabel;
+    private ProgressBar questProgressBar;
+    private Button addTaskToQuestButton;
 
     @Override
     public void start(Stage stage) {
         // Initialize components
         sessionManager = new SessionManager();
-        notificationManager = new NotificationManager();
         timer = new PomodoroTimer(TimerType.WORK);
         currentTask = null;
-        
-        // Send initial notification
-        notificationManager.sendNotification(new Notification(
-            "System Ready",
-            "FocusFlow is ready for testing with 5-second sessions",
-            NotificationType.INFO,
-            null
-        ));
 
-        // Create UI components
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(10));
+        // Initialize gamification system
+        initializeGameification();
 
-        // Notification panel at the top
-        notificationListView = new ListView<>();
-        notificationListView.setPrefHeight(100);
-        Button clearNotificationsButton = new Button("Clear All");
-        clearNotificationsButton.setOnAction(e -> notificationManager.clearAllNotifications());
-        
-        HBox notificationControls = new HBox(10, clearNotificationsButton);
-        notificationControls.setAlignment(Pos.CENTER_RIGHT);
-        
-        VBox notificationBox = new VBox(5, notificationListView, notificationControls);
-        notificationBox.setPadding(new Insets(5));
-        
-        notificationPane = new TitledPane("Notifications", notificationBox);
-        notificationPane.setCollapsible(true);
-        notificationPane.setExpanded(false);
-        
-        // Add notification listener
-        notificationManager.addListener(new NotificationListener() {
-            @Override
-            public void onNotificationCreated(Notification notification) {
-                Platform.runLater(() -> {
-                    notificationListView.getItems().add(0, notification);
-                    if (notificationListView.getItems().size() > 50) {
-                        notificationListView.getItems().remove(notificationListView.getItems().size() - 1);
-                    }
-                    // Expand notification pane when new notification arrives
-                    notificationPane.setExpanded(true);
-                });
-            }
-            
-            @Override
-            public void onNotificationRead(Notification notification) {
-                Platform.runLater(() -> {
-                    int index = notificationListView.getItems().indexOf(notification);
-                    if (index >= 0) {
-                        notificationListView.getItems().set(index, notification);
-                    }
-                });
-            }
-            
-            @Override
-            public void onNotificationsCleared() {
-                Platform.runLater(() -> {
-                    notificationListView.getItems().clear();
-                });
-            }
-        });
+        // Create main layout with tabs
+        TabPane tabPane = new TabPane();
+
+        // Create tabs
+        Tab focusTab = new Tab("Focus");
+        focusTab.setClosable(false);
+
+        Tab questsTab = new Tab("Quests");
+        questsTab.setClosable(false);
+
+        Tab achievementsTab = new Tab("Achievements");
+        achievementsTab.setClosable(false);
+
+        Tab statsTab = new Tab("Stats");
+        statsTab.setClosable(false);
+
+        // Build each tab's content
+        focusTab.setContent(createFocusTabContent());
+        questsTab.setContent(createQuestsTabContent());
+        achievementsTab.setContent(createAchievementsTabContent());
+        statsTab.setContent(createStatsTabContent());
+
+        // Add tabs to the TabPane
+        tabPane.getTabs().addAll(focusTab, questsTab, achievementsTab, statsTab);
+
+        // Create header with level and XP
+        HBox headerBox = createGameificationHeader();
+
+        // Create main layout
+        BorderPane root = new BorderPane();
+        root.setTop(headerBox);
+        root.setCenter(tabPane);
+
+        // Create scene
+        Scene scene = new Scene(root, 700, 600);
+        stage.setTitle("FocusFlow");
+        stage.setScene(scene);
+        stage.show();
+
+        // Initialize UI state
+        updateUIState();
+        updateGameificationDisplay();
+
+        // Check for achievements based on time of day
+        checkTimeBasedAchievements();
+    }
+
+    /**
+     * Initializes all gamification-related components
+     */
+    private void initializeGameification() {
+        // Create XP manager starting at level 1 with 0 XP
+        xpManager = new XpManager();
+
+        // Initialize achievement manager
+        achievementManager = new AchievementManager();
+
+        // Add all achievements to the achievement manager
+        for (Achievement achievement : Achievement.values()) {
+            achievementManager.addAchievement(achievement);
+        }
+
+        // Initialize quest manager
+        questManager = new QuestManager(achievementManager, xpManager);
+
+        // Initialize gamify system
+        gameifySystem = new GameifySystem();
+    }
+
+    /**
+     * Creates the header displaying level and XP information
+     * 
+     * @return HBox containing the header components
+     */
+    private HBox createGameificationHeader() {
+        HBox headerBox = new HBox(15);
+        headerBox.setPadding(new Insets(10));
+        headerBox.setAlignment(Pos.CENTER_LEFT);
+
+        levelLabel = new Label("Level 1");
+        levelLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+
+        xpProgressBar = new ProgressBar(0);
+        xpProgressBar.setPrefWidth(200);
+
+        xpLabel = new Label("0 / 100 XP");
+
+        headerBox.getChildren().addAll(levelLabel, xpProgressBar, xpLabel);
+
+        return headerBox;
+    }
+
+    /**
+     * Creates content for the main Focus tab
+     * 
+     * @return VBox containing the Focus tab components
+     */
+    private VBox createFocusTabContent() {
+        VBox focusContent = new VBox(10);
+        focusContent.setPadding(new Insets(10));
 
         // Task creation section
         HBox taskInputBox = new HBox(10);
@@ -145,11 +211,9 @@ public class App extends Application {
         createTaskButton = new Button("Create Task");
         createTaskButton.setOnAction(e -> createNewTask());
         taskInputBox.getChildren().addAll(taskNameField, taskDescriptionField, createTaskButton);
-        HBox.setHgrow(taskDescriptionField, Priority.ALWAYS);
 
         // Task list section
         taskListView = new ListView<>();
-        taskListView.setPrefHeight(150);
         taskListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
                 selectTask(newVal);
@@ -157,35 +221,22 @@ public class App extends Application {
         });
 
         // Current task display
-        HBox currentTaskBox = new HBox(10);
         currentTaskLabel = new Label("No task selected");
-        currentTaskLabel.setStyle("-fx-font-weight: bold;");
         taskComplete = new CheckBox("Complete");
         taskComplete.setOnAction(e -> {
             if (currentTask != null) {
                 if (taskComplete.isSelected()) {
                     currentTask.markAsCompleted();
-                    notificationManager.sendNotification(new Notification(
-                        "Task Completed",
-                        "Task '" + currentTask.getName() + "' has been completed",
-                        NotificationType.TASK_COMPLETED,
-                        currentTask.getId().toString()
-                    ));
                     endCurrentSession();
+
+                    // Check for task completion achievements
+                    checkTaskCompletionAchievements();
                 } else {
                     currentTask.markAsIncomplete();
-                    notificationManager.sendNotification(new Notification(
-                        "Task Updated",
-                        "Task '" + currentTask.getName() + "' has been marked as incomplete",
-                        NotificationType.TASK_UPDATED,
-                        currentTask.getId().toString()
-                    ));
                 }
                 updateTaskDisplay();
             }
         });
-        currentTaskBox.getChildren().addAll(currentTaskLabel, taskComplete);
-        currentTaskBox.setAlignment(Pos.CENTER_LEFT);
 
         // Timer type selection
         timerTypeComboBox = new ComboBox<>();
@@ -193,23 +244,16 @@ public class App extends Application {
         timerTypeComboBox.setValue(TimerType.WORK);
         timerTypeComboBox.setOnAction(e -> {
             if (currentTask != null) {
-                updateTimer(timerTypeComboBox.getValue());
-                notificationManager.sendNotification(new Notification(
-                    "Timer Type Changed",
-                    "Timer type changed to " + timerTypeComboBox.getValue(),
-                    NotificationType.TIMER_UPDATED,
-                    currentTask.getId().toString()
-                ));
+                timer = new PomodoroTimer(timerTypeComboBox.getValue());
+                setupTimerListeners();
             }
         });
 
         // Timer section
-        HBox timerBox = new HBox(10);
         timerLabel = new Label("25:00");
-        timerLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        timerLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
         sessionStatusLabel = new Label("No active session");
-        timerBox.getChildren().addAll(timerLabel, sessionStatusLabel);
-        timerBox.setAlignment(Pos.CENTER);
+        setupTimerListeners();
 
         // Timer controls
         startButton = new Button("Start");
@@ -221,49 +265,153 @@ public class App extends Application {
         resetButton.setOnAction(e -> resetTimer());
 
         HBox timerControls = new HBox(10);
-        timerControls.getChildren().addAll(startButton, pauseButton, resetButton);
         timerControls.setAlignment(Pos.CENTER);
+        timerControls.getChildren().addAll(startButton, pauseButton, resetButton);
 
         // Session history
         sessionHistoryArea = new TextArea();
         sessionHistoryArea.setEditable(false);
         sessionHistoryArea.setPrefRowCount(5);
-        sessionHistoryArea.setPrefHeight(150);
-        
-        sessionHistoryPane = new TitledPane("Session History", sessionHistoryArea);
-        sessionHistoryPane.setCollapsible(true);
-        sessionHistoryPane.setExpanded(false);
 
         // Add components to root
-        root.getChildren().addAll(
-            notificationPane,
-            new Separator(),
-            new Label("Create New Task:"),
-            taskInputBox,
-            new Separator(),
-            new Label("Task List:"),
-            taskListView,
-            new Separator(),
-            new Label("Current Task:"),
-            currentTaskBox,
-            new Separator(),
-            new Label("Timer Type:"),
-            timerTypeComboBox,
-            new Separator(),
-            timerBox,
-            timerControls,
-            new Separator(),
-            sessionHistoryPane
-        );
+        focusContent.getChildren().addAll(
+                new Label("Create New Task:"),
+                taskInputBox,
+                new Separator(),
+                new Label("Task List:"),
+                taskListView,
+                new Separator(),
+                new Label("Current Task:"),
+                currentTaskLabel,
+                taskComplete,
+                new Separator(),
+                new Label("Timer Type:"),
+                timerTypeComboBox,
+                new Separator(),
+                timerLabel,
+                sessionStatusLabel,
+                timerControls,
+                new Separator(),
+                new Label("Session History:"),
+                sessionHistoryArea);
 
-        // Create scene
-        Scene scene = new Scene(root, 500, 700);
-        stage.setTitle("FocusFlow");
-        stage.setScene(scene);
-        stage.show();
+        return focusContent;
+    }
 
-        // Initialize UI state
-        updateUIState();
+    /**
+     * Creates content for the Quests tab
+     * 
+     * @return VBox containing the Quests tab components
+     */
+    private VBox createQuestsTabContent() {
+        VBox questsContent = new VBox(10);
+        questsContent.setPadding(new Insets(10));
+
+        // Quest creation section
+        HBox questInputBox = new HBox(10);
+        questNameField = new TextField();
+        questNameField.setPromptText("Quest Name");
+        questDescriptionField = new TextArea();
+        questDescriptionField.setPromptText("Quest Description");
+        questDescriptionField.setPrefRowCount(2);
+        createQuestButton = new Button("Create Quest");
+        createQuestButton.setOnAction(e -> createNewQuest());
+        questInputBox.getChildren().addAll(questNameField, questDescriptionField, createQuestButton);
+
+        // Quest list
+        questsListView = new ListView<>();
+        questsListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                selectQuest(newVal);
+            }
+        });
+
+        // Current quest display
+        currentQuestLabel = new Label("No quest selected");
+        currentQuestLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+
+        // Quest progress bar
+        questProgressBar = new ProgressBar(0);
+        questProgressBar.setPrefWidth(200);
+
+        // Button to add current task to selected quest
+        addTaskToQuestButton = new Button("Add Current Task to Quest");
+        addTaskToQuestButton.setOnAction(e -> addCurrentTaskToSelectedQuest());
+        addTaskToQuestButton.setDisable(true);
+
+        // Add components to quests tab
+        questsContent.getChildren().addAll(
+                new Label("Create New Quest:"),
+                questInputBox,
+                new Separator(),
+                new Label("Active Quests:"),
+                questsListView,
+                new Separator(),
+                new Label("Selected Quest:"),
+                currentQuestLabel,
+                new Label("Progress:"),
+                questProgressBar,
+                addTaskToQuestButton);
+
+        return questsContent;
+    }
+
+    /**
+     * Creates content for the Achievements tab
+     * 
+     * @return VBox containing the Achievements tab components
+     */
+    private VBox createAchievementsTabContent() {
+        VBox achievementsContent = new VBox(10);
+        achievementsContent.setPadding(new Insets(10));
+
+        // Create two panes for locked and unlocked achievements
+        Label unlockedHeader = new Label("Unlocked Achievements");
+        unlockedHeader.setFont(Font.font("System", FontWeight.BOLD, 14));
+
+        // Create achievements list
+        achievementsListView = new ListView<>();
+        achievementsListView.setPrefHeight(300);
+
+        // Add components to achievements tab
+        achievementsContent.getChildren().addAll(
+                unlockedHeader,
+                achievementsListView,
+                new Separator(),
+                new Label("Tip: Complete tasks and quests to unlock achievements!"));
+
+        return achievementsContent;
+    }
+
+    /**
+     * Creates content for the Stats tab
+     * 
+     * @return VBox containing the Stats tab components
+     */
+    private VBox createStatsTabContent() {
+        VBox statsContent = new VBox(10);
+        statsContent.setPadding(new Insets(10));
+
+        // Create labels for displaying stats
+        Label tasksCompletedLabel = new Label("Tasks Completed: 0");
+        Label questsCompletedLabel = new Label("Quests Completed: 0");
+        Label achievementsUnlockedLabel = new Label("Achievements Unlocked: 0");
+        Label totalXpEarnedLabel = new Label("Total XP Earned: 0");
+        Label sessionsCompletedLabel = new Label("Focus Sessions Completed: 0");
+        Label totalFocusTimeLabel = new Label("Total Focus Time: 0 minutes");
+
+        // Add components to stats tab
+        statsContent.getChildren().addAll(
+                new Label("Your FocusFlow Statistics:"),
+                new Separator(),
+                tasksCompletedLabel,
+                questsCompletedLabel,
+                achievementsUnlockedLabel,
+                totalXpEarnedLabel,
+                sessionsCompletedLabel,
+                totalFocusTimeLabel);
+
+        return statsContent;
     }
 
     private void setupTimerListeners() {
@@ -274,69 +422,36 @@ public class App extends Application {
                     int minutes = remainingSeconds / 60;
                     int seconds = remainingSeconds % 60;
                     timerLabel.setText(String.format("%02d:%02d", minutes, seconds));
-                    
-                    // Send warning notification at 3 seconds remaining
-                    if (remainingSeconds == 3) {
-                        notificationManager.sendNotification(new Notification(
-                            "Almost Done!",
-                            "3 seconds remaining in your " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session",
-                            NotificationType.WARNING,
-                            currentTask != null ? currentTask.getId().toString() : null
-                        ));
-                    }
                 });
             }
 
             @Override
             public void onTimerCompleted(Timer timer) {
-                final TimerType currentType = currentTimerType.get();
-                final TimerType newType = (currentType == TimerType.WORK) ? TimerType.BREAK : TimerType.WORK;
-                
                 Platform.runLater(() -> {
                     timerLabel.setText("Done!");
-                    notificationManager.sendNotification(new Notification(
-                        "Session Ended",
-                        "Your " + (currentType == TimerType.WORK ? "work" : "break") + " session has ended",
-                        NotificationType.SESSION_ENDED,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
-                    
-                    // Switch timer type
-                    currentTimerType.set(newType);
-                    updateTimer(newType);
-                    
-                    if (newType == TimerType.BREAK) {
-                        notificationManager.sendNotification(new Notification(
-                            "Break Time!",
-                            "Take a 3-second break",
-                            NotificationType.BREAK_REMINDER,
-                            null
-                        ));
-                    } else {
-                        notificationManager.sendNotification(new Notification(
-                            "Work Time!",
-                            "Ready for your next work session",
-                            NotificationType.SESSION_STARTED,
-                            currentTask != null ? currentTask.getId().toString() : null
-                        ));
-                    }
-                    
                     endCurrentSession();
                     updateSessionHistory();
-                    updateUIState();
+
+                    // Award XP for completing a session
+                    int xpAwarded = 10; // Base XP for completing a session
+                    boolean leveledUp = xpManager.addXp(xpAwarded);
+
+                    // Check for streak achievements
+                    checkSessionStreakAchievements();
+
+                    if (leveledUp) {
+                        // Display level up notification
+                        showLevelUpNotification();
+                    }
+
+                    updateGameificationDisplay();
                 });
             }
 
             @Override
             public void onTimerStarted(Timer timer) {
                 Platform.runLater(() -> {
-                    sessionStatusLabel.setText((currentTimerType.get() == TimerType.WORK ? "Work" : "Break") + " session in progress");
-                    notificationManager.sendNotification(new Notification(
-                        "Session Started",
-                        "Your " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session has begun",
-                        NotificationType.SESSION_STARTED,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
+                    sessionStatusLabel.setText("Session in progress");
                     updateUIState();
                 });
             }
@@ -344,13 +459,7 @@ public class App extends Application {
             @Override
             public void onTimerPaused(Timer timer) {
                 Platform.runLater(() -> {
-                    sessionStatusLabel.setText((currentTimerType.get() == TimerType.WORK ? "Work" : "Break") + " session paused");
-                    notificationManager.sendNotification(new Notification(
-                        "Session Paused",
-                        "Your " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session has been paused",
-                        NotificationType.SESSION_PAUSED,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
+                    sessionStatusLabel.setText("Session paused");
                     updateUIState();
                 });
             }
@@ -358,13 +467,7 @@ public class App extends Application {
             @Override
             public void onTimerResumed(Timer timer) {
                 Platform.runLater(() -> {
-                    sessionStatusLabel.setText((currentTimerType.get() == TimerType.WORK ? "Work" : "Break") + " session in progress");
-                    notificationManager.sendNotification(new Notification(
-                        "Session Resumed",
-                        "Your " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session has resumed",
-                        NotificationType.SESSION_RESUMED,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
+                    sessionStatusLabel.setText("Session in progress");
                     updateUIState();
                 });
             }
@@ -372,13 +475,7 @@ public class App extends Application {
             @Override
             public void onTimerStopped(Timer timer) {
                 Platform.runLater(() -> {
-                    sessionStatusLabel.setText((currentTimerType.get() == TimerType.WORK ? "Work" : "Break") + " session stopped");
-                    notificationManager.sendNotification(new Notification(
-                        "Session Stopped",
-                        "Your " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session has been stopped",
-                        NotificationType.SESSION_STOPPED,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
+                    sessionStatusLabel.setText("Session stopped");
                     updateUIState();
                 });
             }
@@ -388,12 +485,6 @@ public class App extends Application {
                 Platform.runLater(() -> {
                     timerLabel.setText(String.format("%02d:00", timer.getType().getDefaultDuration() / 60));
                     sessionStatusLabel.setText("No active session");
-                    notificationManager.sendNotification(new Notification(
-                        "Timer Reset",
-                        "Timer has been reset to initial state",
-                        NotificationType.TIMER_RESET,
-                        currentTask != null ? currentTask.getId().toString() : null
-                    ));
                     updateUIState();
                 });
             }
@@ -403,19 +494,76 @@ public class App extends Application {
     private void createNewTask() {
         String name = taskNameField.getText().trim();
         String description = taskDescriptionField.getText().trim();
-        
+
         if (!name.isEmpty()) {
             Task newTask = new Task(name, description);
             taskListView.getItems().add(newTask);
             taskNameField.clear();
             taskDescriptionField.clear();
-            
-            notificationManager.sendNotification(new Notification(
-                "Task Created",
-                "New task '" + name + "' has been created",
-                NotificationType.TASK_CREATED,
-                newTask.getId().toString()
-            ));
+
+            // Check for first task creation achievement
+            if (taskListView.getItems().size() == 1) {
+                achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_TASK);
+                updateGameificationDisplay();
+            }
+        }
+    }
+
+    private void createNewQuest() {
+        String name = questNameField.getText().trim();
+        String description = questDescriptionField.getText().trim();
+
+        if (!name.isEmpty()) {
+            // Create a new quest with base XP of 50
+            Quest newQuest = new Quest(name, description, null, 50);
+
+            // Add to the quest manager
+            questManager.addQuest(newQuest);
+
+            // Add to the list view
+            questsListView.getItems().add(newQuest);
+
+            // Clear input fields
+            questNameField.clear();
+            questDescriptionField.clear();
+
+            // Check for first quest creation achievement
+            if (questsListView.getItems().size() == 1) {
+                achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_QUEST);
+                updateGameificationDisplay();
+            }
+        }
+    }
+
+    private void selectQuest(Quest quest) {
+        if (quest != null) {
+            // Update UI
+            currentQuestLabel.setText(quest.getTitle());
+            questProgressBar.setProgress(quest.getProgressPercentage() / 100.0);
+
+            // Enable the add task button if a task is selected
+            addTaskToQuestButton.setDisable(currentTask == null);
+        }
+    }
+
+    private void addCurrentTaskToSelectedQuest() {
+        Quest selectedQuest = questsListView.getSelectionModel().getSelectedItem();
+
+        if (selectedQuest != null && currentTask != null) {
+            // Add task to quest
+            selectedQuest.addTask(currentTask);
+
+            // Update quest progress display
+            questProgressBar.setProgress(selectedQuest.getProgressPercentage() / 100.0);
+
+            // Check if adding this task completes the quest
+            if (currentTask.isComplete()) {
+                selectedQuest.updateCompletionStatus();
+
+                if (selectedQuest.isCompleted()) {
+                    handleQuestCompletion(selectedQuest);
+                }
+            }
         }
     }
 
@@ -424,20 +572,18 @@ public class App extends Application {
             currentTask = task;
             updateTaskDisplay();
             updateUIState();
+            // Set the task ID for the timer
             timer.setCurrentTaskId(task.getId().toString());
-            
-            notificationManager.sendNotification(new Notification(
-                "Task Selected",
-                "Task '" + task.getName() + "' has been selected",
-                NotificationType.TASK_SELECTED,
-                task.getId().toString()
-            ));
+
+            // Enable the add task to quest button if a quest is selected
+            Quest selectedQuest = questsListView.getSelectionModel().getSelectedItem();
+            addTaskToQuestButton.setDisable(selectedQuest == null);
         }
     }
 
     private void updateTaskDisplay() {
         if (currentTask != null) {
-            currentTaskLabel.setText("Current Task: " + currentTask.getName());
+            currentTaskLabel.setText(currentTask.getName());
             taskComplete.setSelected(currentTask.isComplete());
         } else {
             currentTaskLabel.setText("No task selected");
@@ -456,46 +602,39 @@ public class App extends Application {
         resetButton.setDisable(!hasTask || isSessionActive);
         taskComplete.setDisable(!hasTask);
         timerTypeComboBox.setDisable(!hasTask || isSessionActive);
-        
-        // Update start button text based on timer type
-        startButton.setText(currentTimerType.get() == TimerType.WORK ? "Start Work" : "Start Break");
+    }
+
+    private void updateGameificationDisplay() {
+        // Update level and XP display
+        int currentLevel = xpManager.getCurrentLevel();
+        int currentXp = xpManager.getCurrentXp();
+        int xpForNextLevel = xpManager.getXpForNextLevel();
+        int xpForCurrentLevel = xpManager.getXpForCurrentLevel();
+        int xpInCurrentLevel = currentXp - xpForCurrentLevel;
+        int xpRequiredForLevel = xpForNextLevel - xpForCurrentLevel;
+
+        levelLabel.setText("Level " + currentLevel);
+        xpLabel.setText(xpInCurrentLevel + " / " + xpRequiredForLevel + " XP");
+        xpProgressBar.setProgress((double) xpInCurrentLevel / xpRequiredForLevel);
+
+        // Update achievements list
+        achievementsListView.getItems().clear();
+        HashSet<Achievement> unlockedAchievements = achievementManager.getUnlockedAchievements();
+        achievementsListView.getItems().addAll(unlockedAchievements);
     }
 
     private void startNewSession() {
         if (currentTask != null) {
             try {
                 sessionManager.startSession(currentTask.getId().toString());
-                timer = new PomodoroTimer(currentTimerType.get(), 5); // 5 seconds for testing
-                timer.setCurrentTaskId(currentTask.getId().toString());
-                setupTimerListeners();
                 timer.start();
                 updateUIState();
-                
-                notificationManager.sendNotification(new Notification(
-                    "Session Started",
-                    "Started 5-second " + (currentTimerType.get() == TimerType.WORK ? "work" : "break") + " session for task: " + currentTask.getName(),
-                    NotificationType.SESSION_STARTED,
-                    currentTask.getId().toString()
-                ));
             } catch (IllegalArgumentException e) {
+                // Show error to user
                 sessionStatusLabel.setText("Error: " + e.getMessage());
-                
-                notificationManager.sendNotification(new Notification(
-                    "Session Error",
-                    e.getMessage(),
-                    NotificationType.ERROR,
-                    null
-                ));
             }
         } else {
             sessionStatusLabel.setText("Please select a task first");
-            
-            notificationManager.sendNotification(new Notification(
-                "Task Required",
-                "Please select a task before starting a session",
-                NotificationType.WARNING,
-                null
-            ));
         }
     }
 
@@ -522,29 +661,239 @@ public class App extends Application {
         sessionManager.endCurrentSession();
         updateSessionHistory();
         updateUIState();
+
+        // Check for "Return from break" achievement if this was a break session
+        if (timer.getType() == TimerType.SHORT_BREAK || timer.getType() == TimerType.LONG_BREAK) {
+            achievementManager.unlockAchievement(Achievement.RETURN_FROM_BREAK);
+            updateGameificationDisplay();
+        }
     }
 
     private void updateSessionHistory() {
         StringBuilder history = new StringBuilder();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        
-        for (FocusSession session : sessionManager.getSessionHistory()) {
+
+        for (Object session : sessionManager.getSessionHistory()) {
             history.append(String.format(
-                "[%s] %s - Duration: %d seconds\n",
-                session.getStartTime().format(formatter),
-                session.getType() == TimerType.WORK ? "Work Session" : "Break Session",
-                session.getDurationSeconds()
-            ));
+                    "Session: %s - Duration: %d seconds\n",
+                    ((FocusSession) session).getStartTime().format(formatter),
+                    ((FocusSession) session).getDurationSeconds()));
         }
         sessionHistoryArea.setText(history.toString());
-        sessionHistoryPane.setExpanded(true); // Auto-expand when updated
     }
 
-    private void updateTimer(TimerType type) {
-        final PomodoroTimer newTimer = new PomodoroTimer(type, 5); // 5 seconds for testing
-        newTimer.setCurrentTaskId(currentTask != null ? currentTask.getId().toString() : null);
-        setupTimerListeners();
-        this.timer = newTimer;
+    /**
+     * Checks for time-based achievements based on the current time of day
+     */
+    private void checkTimeBasedAchievements() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalTime time = now.toLocalTime();
+
+        // Check for early morning achievements
+        if (time.isBefore(LocalTime.of(6, 0))) {
+            achievementManager.unlockAchievement(Achievement.MORNING_HERO);
+            achievementManager.unlockAchievement(Achievement.EARLY_BIRD);
+        } else if (time.isBefore(LocalTime.of(8, 0))) {
+            achievementManager.unlockAchievement(Achievement.EARLY_BIRD);
+        }
+
+        // Check for night owl achievement
+        if (time.isAfter(LocalTime.of(22, 0))) {
+            achievementManager.unlockAchievement(Achievement.NIGHT_OWL);
+        }
+
+        // Check for weekend warrior achievement
+        int dayOfWeek = now.getDayOfWeek().getValue();
+        if (dayOfWeek == 6 || dayOfWeek == 7) { // Saturday or Sunday
+            achievementManager.unlockAchievement(Achievement.WEEKEND_WARRIOR);
+        }
+
+        updateGameificationDisplay();
+    }
+
+    /**
+     * Checks for task completion related achievements
+     */
+    private void checkTaskCompletionAchievements() {
+        // Count completed tasks
+        int completedTasks = 0;
+        int completedSubtasks = 0;
+
+        for (Task task : taskListView.getItems()) {
+            if (task.isComplete()) {
+                completedTasks++;
+
+                // Count subtasks
+                for (Task subtask : task.getSubtasks()) {
+                    if (subtask.isComplete()) {
+                        completedSubtasks++;
+                    }
+                }
+            }
+        }
+
+        // Check for task completion milestones
+        if (completedTasks >= 1) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_TASK);
+        }
+        if (completedTasks >= 10) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_10_TASKS);
+        }
+        if (completedTasks >= 50) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_50_TASKS);
+        }
+        if (completedTasks >= 100) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_100_TASKS);
+        }
+        if (completedTasks >= 500) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_500_TASKS);
+        }
+        if (completedTasks >= 1000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_1000_TASKS);
+        }
+        if (completedTasks >= 5000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_5000_TASKS);
+        }
+        if (completedTasks >= 9001) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_9001_TASKS);
+        }
+
+        // Check for subtask completion milestones
+        if (completedSubtasks >= 10) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_10_SUBTASKS);
+        }
+        if (completedSubtasks >= 50) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_50_SUBTASKS);
+        }
+        if (completedSubtasks >= 100) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_100_SUBTASKS);
+        }
+        if (completedSubtasks >= 500) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_500_SUBTASKS);
+        }
+        if (completedSubtasks >= 1000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_1000_SUBTASKS);
+        }
+        if (completedSubtasks >= 5000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_5000_SUBTASKS);
+        }
+        if (completedSubtasks >= 9001) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_9001_SUBTASKS);
+        }
+        if (completedSubtasks >= 10000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_10000_SUBTASKS);
+        }
+
+        // Check if all subtasks of this task are complete
+        if (currentTask != null && !currentTask.getSubtasks().isEmpty()) {
+            boolean allSubtasksComplete = true;
+            for (Task subtask : currentTask.getSubtasks()) {
+                if (!subtask.isComplete()) {
+                    allSubtasksComplete = false;
+                    break;
+                }
+            }
+
+            if (allSubtasksComplete) {
+                achievementManager.unlockAchievement(Achievement.CONQOR_AND_DIVIDE);
+            }
+        }
+
+        updateGameificationDisplay();
+    }
+
+    /**
+     * Checks for session streak achievements
+     */
+    private void checkSessionStreakAchievements() {
+        // Get the number of consecutive sessions
+        int consecutiveSessions = sessionManager.getConsecutiveSessionsCount();
+
+        // Check for streak achievements
+        if (consecutiveSessions >= 2) {
+            achievementManager.unlockAchievement(Achievement.TWO_SESSIONS_IN_A_ROW);
+        }
+        if (consecutiveSessions >= 3) {
+            achievementManager.unlockAchievement(Achievement.THREE_SESSIONS_IN_A_ROW);
+        }
+        if (consecutiveSessions >= 5) {
+            achievementManager.unlockAchievement(Achievement.FIVE_SESSIONS_IN_A_ROW);
+        }
+        if (consecutiveSessions >= 12) {
+            achievementManager.unlockAchievement(Achievement.TWELVE_SESSIONS_IN_A_ROW);
+        }
+        if (consecutiveSessions >= 24) {
+            achievementManager.unlockAchievement(Achievement.TWENTY_FOUR_SESSIONS_IN_A_ROW);
+        }
+        if (consecutiveSessions >= 32) {
+            achievementManager.unlockAchievement(Achievement.THIRTY_TWO_SESSIONS_IN_A_ROW);
+        }
+
+        updateGameificationDisplay();
+    }
+
+    /**
+     * Shows a level up notification
+     */
+    private void showLevelUpNotification() {
+        // In a real app, you would create a nice popup notification
+        // For now, we'll just update the session status label
+        sessionStatusLabel.setText("Level Up! You are now level " + xpManager.getCurrentLevel());
+    }
+
+    /**
+     * Handles the completion of a quest, awarding achievements and XP
+     * 
+     * @param quest The completed quest
+     */
+    private void handleQuestCompletion(Quest quest) {
+        // Award XP for completing the quest
+        int xpReward = quest.calculateXpReward();
+        boolean leveledUp = xpManager.addXp(xpReward);
+
+        if (leveledUp) {
+            showLevelUpNotification();
+        }
+
+        // Update the quests display
+        questProgressBar.setProgress(1.0);
+
+        // Count completed quests for achievements
+        int completedQuests = 0;
+        for (int i = 0; i < questsListView.getItems().size(); i++) {
+            Quest q = questsListView.getItems().get(i);
+            if (q.isCompleted()) {
+                completedQuests++;
+            }
+        }
+
+        // Check for quest completion milestones
+        if (completedQuests >= 1) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_QUEST);
+        }
+        if (completedQuests >= 10) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_10_QUESTS);
+        }
+        if (completedQuests >= 50) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_50_QUESTS);
+        }
+        if (completedQuests >= 100) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_100_QUESTS);
+        }
+        if (completedQuests >= 500) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_500_QUESTS);
+        }
+        if (completedQuests >= 1000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_1000_QUESTS);
+        }
+        if (completedQuests >= 5000) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_5000_QUESTS);
+        }
+        if (completedQuests >= 9001) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_9001_QUESTS);
+        }
+
+        updateGameificationDisplay();
     }
 
     public static void main(String[] args) {
