@@ -10,6 +10,8 @@ package com.focusflow.core.task;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import com.focusflow.core.task.TaskStatus.TaskWithStatus;
@@ -43,6 +45,7 @@ public class Task implements Serializable, TaskWithStatus {
     
     // Using UUID for thread-safe unique identification
     private final UUID id;
+    private List<Task> subtasks;
     
     /**
      * Constructs a new Task with the specified name and description.
@@ -63,6 +66,7 @@ public class Task implements Serializable, TaskWithStatus {
         this.isCanceled = false;
         this.priority = TaskPriority.MEDIUM;
         this.category = new TaskCategory(); // Default uncategorized
+        this.subtasks = new ArrayList<>();
     }
 
     /**
@@ -274,6 +278,39 @@ public class Task implements Serializable, TaskWithStatus {
      */
     public TaskStatus getStatus() {
         return TaskStatus.fromTask(this);
+    }
+
+    /**
+     * Gets the list of subtasks for this task.
+     * 
+     * @return List of subtasks
+     */
+    public List<Task> getSubtasks() {
+        return new ArrayList<>(subtasks);
+    }
+
+    /**
+     * Adds a subtask to this task.
+     * 
+     * @param subtask The subtask to add
+     */
+    public void addSubtask(Task subtask) {
+        subtasks.add(subtask);
+        this.lastModifiedDateTime = LocalDateTime.now();
+    }
+
+    /**
+     * Removes a subtask from this task.
+     * 
+     * @param subtask The subtask to remove
+     * @return true if the subtask was removed, false otherwise
+     */
+    public boolean removeSubtask(Task subtask) {
+        boolean removed = subtasks.remove(subtask);
+        if (removed) {
+            this.lastModifiedDateTime = LocalDateTime.now();
+        }
+        return removed;
     }
 
     @Override
