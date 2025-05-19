@@ -25,7 +25,7 @@ public class SessionStats extends Object {
     public SessionStats(FocusSession session) {
         this.sessionId = session.getId().toString();
         this.duration = Duration.ofSeconds(session.getDurationSeconds());
-        this.taskId = session.getTaskId();
+        this.taskId = session.getAssociatedTaskId();
         this.completed = session.isCompleted();
     }
 
