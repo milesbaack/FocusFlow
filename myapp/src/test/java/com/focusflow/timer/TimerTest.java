@@ -4,7 +4,7 @@
  * @version 1.0.0
  */
 
-package  com.focusflow.timer;
+package com.focusflow.core.timer;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -13,12 +13,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import com.focusflow.core.timer.PomodoroTimer;
-import com.focusflow.core.timer.Timer;
-import com.focusflow.core.timer.TimerEventListener;
-import com.focusflow.core.timer.TimerState;
-import com.focusflow.core.timer.TimerType;
 
 /**
  * Test class for the Timer interface.
