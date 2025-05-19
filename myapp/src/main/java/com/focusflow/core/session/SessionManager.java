@@ -1,28 +1,64 @@
+package com.focusflow.core.session;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 /**
  * Manages focus sessions and their history.
  * 
  * This class is responsible for creating, tracking, and managing focus sessions.
  * It maintains a history of all sessions and provides methods to query and filter
  * sessions based on various criteria.
- * 
- * @author Emilio Lopez
- * @version 1.1.0
  */
-
-package com.focusflow.core.session;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-import com.focusflow.core.timer.TimerType;
-
 public class SessionManager {
     private final List<FocusSession> sessionHistory = new ArrayList<>();
     private final List<SessionEventListener> listeners = new ArrayList<>();
     private FocusSession currentSession;
+    private FocusSession lastCompletedSession;
+    private int consecutiveSessionsCount;
+    
+    // Configurable break durations and tolerance
+    private int shortBreakMinutes = 5;
+    private int longBreakMinutes = 15;
+    private int breakToleranceMinutes = 2;
+
+    /**
+     * Sets the duration for short breaks.
+     * 
+     * @param minutes The short break duration in minutes
+     */
+    public void setShortBreakMinutes(int minutes) {
+        if (minutes <= 0) {
+            throw new IllegalArgumentException("Break duration must be positive");
+        }
+        this.shortBreakMinutes = minutes;
+    }
+
+    /**
+     * Sets the duration for long breaks.
+     * 
+     * @param minutes The long break duration in minutes
+     */
+    public void setLongBreakMinutes(int minutes) {
+        if (minutes <= 0) {
+            throw new IllegalArgumentException("Break duration must be positive");
+        }
+        this.longBreakMinutes = minutes;
+    }
+
+    /**
+     * Sets the tolerance for break timing.
+     * 
+     * @param minutes The tolerance in minutes
+     */
+    public void setBreakToleranceMinutes(int minutes) {
+        if (minutes < 0) {
+            throw new IllegalArgumentException("Tolerance cannot be negative");
+        }
+        this.breakToleranceMinutes = minutes;
+    }
 
     /**
      * Adds a listener to receive session events.
@@ -43,24 +79,60 @@ public class SessionManager {
     }
 
     /**
+     * Gets the current count of consecutive sessions.
+     * 
+     * @return The number of consecutive sessions
+     */
+    public int getConsecutiveSessionsCount() {
+        return consecutiveSessionsCount;
+    }
+
+    /**
      * Starts a new focus session associated with a task.
      * 
-     * @param taskId The ID of the task to associate with the session
+     * @param associatedTaskId The ID of the task to associate with the session
      * @return The newly created focus session
      * @throws IllegalArgumentException if the task ID is null or empty
      */
-    public FocusSession startSession(String taskId) {
-        if (taskId == null || taskId.trim().isEmpty()) {
+    public FocusSession startSession(String associatedTaskId) {
+        if (associatedTaskId == null || associatedTaskId.trim().isEmpty()) {
             throw new IllegalArgumentException("Task ID cannot be null or empty");
         }
 
-        if (currentSession != null) {
-            throw new IllegalStateException("A session is already in progress");
+        currentSession = new FocusSession(associatedTaskId);
+        
+        // Check if this session should be marked as consecutive
+        if (lastCompletedSession != null) {
+            // Determine if this should use a short or long break duration
+            int breakDuration = shouldUseShortBreak() ? shortBreakMinutes : longBreakMinutes;
+            
+            // Mark as consecutive if it follows a scheduled break
+            if (currentSession.markAsConsecutiveSession(
+                lastCompletedSession.getEndTime(),
+                breakDuration,
+                breakToleranceMinutes
+            )) {
+                consecutiveSessionsCount++;
+            } else {
+                consecutiveSessionsCount = 1;
+            }
+        } else {
+            consecutiveSessionsCount = 1;
         }
-
-        currentSession = new FocusSession(taskId, LocalDateTime.now(), null, TimerType.WORK);
+        
         notifySessionStarted(currentSession);
         return currentSession;
+    }
+
+    /**
+     * Determines if a short break should be used based on session history.
+     * Override this method to implement custom logic for short/long breaks.
+     * 
+     * @return true if a short break should be used, false for a long break
+     */
+    protected boolean shouldUseShortBreak() {
+        // Default implementation: use short break if less than 4 consecutive sessions
+        return getConsecutiveSessionsCount() % 4 != 0;
     }
 
     /**
@@ -72,13 +144,7 @@ public class SessionManager {
         if (currentSession == null) {
             throw new IllegalStateException("No active session to pause");
         }
-        // Create a new session with paused state
-        currentSession = new FocusSession(
-            currentSession.getTaskId(),
-            currentSession.getStartTime(),
-            LocalDateTime.now(),
-            currentSession.getType()
-        );
+        currentSession.pauseSession();
         notifySessionPaused(currentSession);
     }
 
@@ -91,13 +157,7 @@ public class SessionManager {
         if (currentSession == null) {
             throw new IllegalStateException("No active session to resume");
         }
-        // Create a new session with resumed state
-        currentSession = new FocusSession(
-            currentSession.getTaskId(),
-            LocalDateTime.now(),
-            null,
-            currentSession.getType()
-        );
+        currentSession.resumeSession();
         notifySessionResumed(currentSession);
     }
 
@@ -110,13 +170,9 @@ public class SessionManager {
         if (currentSession == null) {
             throw new IllegalStateException("No active session to end");
         }
-        currentSession = new FocusSession(
-            currentSession.getTaskId(),
-            currentSession.getStartTime(),
-            LocalDateTime.now(),
-            currentSession.getType()
-        );
+        currentSession.endSession();
         sessionHistory.add(currentSession);
+        lastCompletedSession = currentSession;  // Track the last completed session
         notifySessionEnded(currentSession);
         notifySessionHistoryChanged(sessionHistory);
         currentSession = null;
@@ -148,7 +204,7 @@ public class SessionManager {
      */
     public List<FocusSession> getSessionsForTask(String taskId) {
         return sessionHistory.stream()
-            .filter(session -> session.getTaskId().equals(taskId))
+            .filter(session -> session.getAssociatedTaskId().equals(taskId))
             .collect(Collectors.toList());
     }
 
