@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.focusflow.timer.TimerTest
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.539 s -- in com.focusflow.timer.TimerTest
