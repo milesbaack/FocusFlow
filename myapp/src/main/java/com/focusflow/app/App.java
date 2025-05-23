@@ -37,14 +37,17 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
 /**
- * Main application class for FocusFlow.
- * 
- * This class implements the main user interface for the FocusFlow application,
- * integrating the timer, task management, and session tracking features
- * 
+ * The App class serves as the main JavaFX application for the FocusFlow app.
+ * It provides the graphical user interface (GUI) and integrates task management,
+ * a Pomodoro timer, and user interactions for productivity tracking.
+ *
+ * <p>This class is responsible for initializing the main scene, handling UI interactions,
+ * and reacting to timer events such as starting, pausing, resuming, completing, etc.</p>
+ *
  * @author Brisa Rueda
  * @version 3.0.0
  */
+
 public class App extends Application implements TimerEventListener {
     private PomodoroTimer timer;
     private SessionManager sessionManager;
@@ -68,9 +71,16 @@ public class App extends Application implements TimerEventListener {
     private VBox taskBox;
     private Font pixelFont;
 
+    /**
+     * Starts the FocusFlow JavaFX application.
+     * Initializes the scene, components, and user interface layout.
+     *
+     * @param stage The primary stage for this application.
+     */
+
     @Override
     public void start(Stage stage) {
-        // Try to load pixel font
+        
         try {
             InputStream is = getClass().getResourceAsStream("/UI/pixel.ttf");
             if (is != null) {
@@ -84,13 +94,15 @@ public class App extends Application implements TimerEventListener {
             pixelFont = Font.font("Courier New", FontWeight.BOLD, 24);
         }
 
+        
+
         // Initialize components
         sessionManager = new SessionManager();
         timer = new PomodoroTimer(TimerType.WORK, 35 * 60); // 35 minutes
         timer.addListener(this);
 
         // Load main background
-        Image backgroundImage = new Image(getClass().getResource("/UI/MainBG.png").toString());
+        Image backgroundImage = new Image(getClass().getResource("/UI/focusflowBG.png").toString());
         ImageView background = new ImageView(backgroundImage);
 
         // Main layout
@@ -162,7 +174,7 @@ public class App extends Application implements TimerEventListener {
         sidebarIcons.getChildren().addAll(addTaskBtn, statsBtn, calendarBtn, questionBtn);
 
         // Timer display (in the clock)
-        timerLabel = new Label("12:56");
+        timerLabel = new Label("00:00");
         timerLabel.setFont(Font.font(pixelFont.getFamily(), 80)); // Set font size directly
         timerLabel.setTextFill(Color.BLACK);
         // increase font size for better visibility
@@ -179,20 +191,21 @@ public class App extends Application implements TimerEventListener {
         // Start button
         startButton = new Button("START");
         startButton.setFont(Font.font(pixelFont.getFamily(), 24));
-        startButton.setStyle("-fx-background-color: #65B054; -fx-text-fill: white; -fx-background-radius: 15;");
+        startButton.setStyle("-fx-background-color:rgb(255, 255, 255); -fx-text-fill: black; -fx-background-radius: 15;");
         startButton.setPrefSize(80, 25);
         AnchorPane.setTopAnchor(startButton, 395.0);
         AnchorPane.setRightAnchor(startButton, 190.0);
 
         // Task list (near the left side)
         taskBox = new VBox(10);
-        taskBox.setPadding(new Insets(10));
+        taskBox.setPadding(new Insets(40));
         AnchorPane.setTopAnchor(taskBox, 160.0);
         AnchorPane.setLeftAnchor(taskBox, 100.0);
 
         // Let's Go button
         Button letsGoButton = new Button("Let's Go!");
-        letsGoButton.setStyle("-fx-background-color: #FFD0B0; -fx-text-fill: black; -fx-background-radius: 10;");
+        letsGoButton.setStyle("-fx-background-color:rgb(244, 214, 42); -fx-text-fill: black; -fx-background-radius: 10;");
+        letsGoButton.setFont(Font.font(pixelFont.getFamily(),20));
         AnchorPane.setTopAnchor(letsGoButton, 470.0);
         AnchorPane.setRightAnchor(letsGoButton, 10.0);
 
@@ -200,7 +213,7 @@ public class App extends Application implements TimerEventListener {
         progressBar = new ProgressBar(0.5); // Initial value showing example
         progressBar.setPrefWidth(950);
         progressBar.setPrefHeight(48);
-        progressBar.setStyle("-fx-accent: #FFA500;");
+        progressBar.setStyle("-fx-accent:rgb(255, 209, 3);");
         AnchorPane.setBottomAnchor(progressBar, 40.0);
         AnchorPane.setLeftAnchor(progressBar, 20.0);
 
@@ -222,12 +235,12 @@ public class App extends Application implements TimerEventListener {
 
         // Notepad panel (hidden initially)
         notepadPane = new AnchorPane();
-        Rectangle notepadBg = new Rectangle(300, 400);
+        Rectangle notepadBg = new Rectangle(200, 300);
         notepadBg.setFill(Color.WHITE);
         notepadBg.setStroke(Color.BLACK);
 
         notepadArea = new TextArea();
-        notepadArea.setPrefSize(280, 380);
+        notepadArea.setPrefSize(180, 280);
         notepadArea.setWrapText(true);
 
         AnchorPane.setTopAnchor(notepadBg, 0.0);
@@ -247,10 +260,11 @@ public class App extends Application implements TimerEventListener {
         infoBg.setFill(Color.WHITE);
         infoBg.setStroke(Color.BLACK);
 
-        Label infoTitle = new Label("FocusFlow - App Information");
-        infoTitle.setFont(Font.font("Arial", 16));
+        Label infoTitle = new Label("About");
+        infoTitle.setFont(Font.font(pixelFont.getFamily(), 20));
 
         TextArea infoText = new TextArea();
+        infoText.setFont(Font.font(pixelFont.getFamily(), 17));
         infoText.setText("FocusFlow is a productivity app that helps you focus on tasks.\n\n" +
                 "- Add tasks with the + button\n" +
                 "- Select a task to start the timer\n" +
@@ -274,7 +288,7 @@ public class App extends Application implements TimerEventListener {
         infoPane.setVisible(false);
 
         AnchorPane.setTopAnchor(infoPane, 150.0);
-        AnchorPane.setLeftAnchor(infoPane, 300.0);
+        AnchorPane.setLeftAnchor(infoPane, 150.0);
 
         // Add a star icon at the bottom right of progress bar
         Image starImg = new Image(getClass().getResource("/UI/star.png").toString(),
@@ -341,6 +355,13 @@ public class App extends Application implements TimerEventListener {
         stage.show();
     }
 
+     /**
+     * Adds a task to the UI task list.
+     *
+     * @param task The Task object to add.
+     * @param index The index of the task in the list.
+     */
+
     private void addTaskToUI(Task task, int index) {
         HBox taskRow = new HBox(10);
 
@@ -351,16 +372,23 @@ public class App extends Application implements TimerEventListener {
         // Create the task label
         Label taskLabel = new Label(task.getName());
         taskLabel.setPrefWidth(150);
-        taskLabel.setFont(Font.font("Arial", 14));
+        taskLabel.setFont(Font.font(pixelFont.getFamily(), 30));
+
 
         // Add style for selection
         if (index == selectedTaskIndex) {
-            taskLabel.setStyle("-fx-text-fill: #65B054; -fx-font-weight: bold;");
+            taskLabel.setStyle("-fx-text-fill:rgb(27, 9, 163); -fx-font-weight: bold;");
         } else {
             taskLabel.setStyle("-fx-text-fill: black;");
         }
 
-        // Add checkbox and label to row
+         /**
+     * Selects a task from the task list by its index.
+     * Updates the UI and sets the current timer duration.
+     *
+     * @param index The index of the task to select.
+     */
+        
         taskRow.getChildren().addAll(checkbox, taskLabel);
 
         // Add click handler for label (selecting task)
@@ -384,6 +412,13 @@ public class App extends Application implements TimerEventListener {
         taskBox.getChildren().add(taskRow);
     }
 
+     /**
+     * Selects a task from the task list by its index.
+     * Updates the UI and sets the current timer duration.
+     *
+     * @param index The index of the task to select.
+     */
+
     private void selectTask(int index) {
         // Deselect previous task
         if (selectedTaskIndex == index) {
@@ -398,7 +433,7 @@ public class App extends Application implements TimerEventListener {
         selectedTaskIndex = index;
         if (index >= 0 && index < taskRows.size()) {
             Label newLabel = (Label) taskRows.get(index).getChildren().get(1);
-            newLabel.setStyle("-fx-text-fill: #65B054; -fx-font-weight: bold;");
+            newLabel.setStyle("-fx-text-fill:rgb(49, 91, 40); -fx-font-weight: bold;");
 
             // Set as current task
             currentTask = tasks.get(index);
@@ -417,6 +452,12 @@ public class App extends Application implements TimerEventListener {
             updateTimerDisplay(minutes * 60);
         }
     }
+
+     /**
+     * Displays a dialog window to input and add a new task.
+     *
+     * @param parentStage The parent stage from which the dialog is opened.
+     */
 
     private void showAddTaskDialog(Stage parentStage) {
         Stage dialog = new Stage();
@@ -468,6 +509,10 @@ public class App extends Application implements TimerEventListener {
         dialog.showAndWait();
     }
 
+     /**
+     * Toggles the Pomodoro timer between start and pause states.
+     */
+
     private void toggleTimer() {
         if (timer.getState() == TimerState.RUNNING) {
             timer.pause();
@@ -490,6 +535,10 @@ public class App extends Application implements TimerEventListener {
         }
     }
 
+/**
+     * Toggles background music playback and updates the UI icon.
+     */
+
     private void toggleSound() {
         if (isMuted) {
             if (backgroundMusic != null) {
@@ -505,10 +554,18 @@ public class App extends Application implements TimerEventListener {
         isMuted = !isMuted;
     }
 
+    /**
+     * Shows or hides the notepad overlay panel.
+     */
+
     private void toggleNotepad() {
         notepadPane.setVisible(!isNotepadOpen);
         isNotepadOpen = !isNotepadOpen;
     }
+
+     /**
+     * Toggles the display of the informational help panel.
+     */
 
     private void toggleInfo() {
         System.out.println("Toggling info pane visibility");
@@ -516,13 +573,18 @@ public class App extends Application implements TimerEventListener {
         isInfoOpen = !isInfoOpen;
     }
 
+     /**
+     * Opens a placeholder statistics window.
+     * Currently shows a stub message.
+     */
+
     private void openStats() {
         // Blank screen
         Stage statsStage = new Stage();
         statsStage.setTitle("Statistics");
         VBox statsLayout = new VBox(20);
         statsLayout.setPadding(new Insets(20));
-        Label statsLabel = new Label("Statistics will be displayed here.");
+        Label statsLabel = new Label("Statistics coming soon.");
         statsLabel.setFont(Font.font(pixelFont.getFamily(), 24));
         statsLabel.setTextFill(Color.BLACK);
         statsLayout.getChildren().add(statsLabel);
@@ -531,6 +593,10 @@ public class App extends Application implements TimerEventListener {
         statsStage.show();
 
     }
+
+     /**
+     * Updates the progress bar based on completed tasks.
+     */
 
     private void updateProgressBar() {
         int completedTasks = 0;
@@ -544,6 +610,12 @@ public class App extends Application implements TimerEventListener {
         progressBar.setProgress(progress);
     }
 
+     /**
+     * Updates the on-screen timer label with the remaining time.
+     *
+     * @param seconds Remaining seconds to display.
+     */
+
     private void updateTimerDisplay(int seconds) {
         int minutes = seconds / 60;
         int remainingSeconds = seconds % 60;
@@ -551,21 +623,46 @@ public class App extends Application implements TimerEventListener {
         System.out.println("Updating timer display: " + String.format("%02d:%02d", minutes, remainingSeconds));
     }
 
-    // TimerEventListener methods
+     // Below are Javadoc comments for the TimerEventListener interface methods:
+
+    /**
+     * Called when the timer starts.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
+
     @Override
     public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("PAUSE"));
     }
+
+    /**
+     * Called when the timer is paused.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
 
     @Override
     public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("START"));
     }
 
+     /**
+     * Called when the timer resumes from a paused state.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
+
     @Override
     public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("PAUSE"));
     }
+
+      /**
+     * Called when the timer completes its countdown.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
 
     @Override
     public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
@@ -587,16 +684,35 @@ public class App extends Application implements TimerEventListener {
         });
     }
 
+     /**
+     * Called when the timer is manually stopped.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
+
     @Override
     public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("START"));
     }
+
+    /**
+     * Called every second as the timer counts down.
+     *
+     * @param timer The timer instance.
+     * @param remainingSeconds Seconds remaining in the countdown.
+     */
 
     @Override
     public void onTimerTick(com.focusflow.core.timer.Timer timer, int remainingSeconds) {
         System.out.println("Timer tick: " + remainingSeconds + " seconds remaining");
         Platform.runLater(() -> updateTimerDisplay(remainingSeconds));
     }
+
+    /**
+     * Called when the timer is reset.
+     *
+     * @param timer The timer instance that triggered the event.
+     */
 
     @Override
     public void onTimerReset(com.focusflow.core.timer.Timer timer) {
@@ -605,6 +721,12 @@ public class App extends Application implements TimerEventListener {
             System.out.println("Timer reset");
         });
     }
+
+    /**
+     * Main entry point to launch the JavaFX application.
+     *
+     * @param args Command line arguments.
+     */
 
     public static void main(String[] args) {
         launch(args);
