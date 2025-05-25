@@ -3,14 +3,15 @@ package com.focusflow.app;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
-import com.focusflow.core.gameify.Achievement;
 import com.focusflow.core.gameify.AchievementManager;
 import com.focusflow.core.gameify.Quest;
-import com.focusflow.core.session.FocusSession;
-import com.focusflow.core.session.SessionEventListener;
+import com.focusflow.core.gameify.QuestManager;
+import com.focusflow.core.gameify.XpManager;
 import com.focusflow.core.session.SessionManager;
 import com.focusflow.core.task.Task;
+import com.focusflow.core.task.TaskPriority;
 import com.focusflow.core.timer.PomodoroTimer;
 import com.focusflow.core.timer.TimerEventListener;
 import com.focusflow.core.timer.TimerState;
@@ -18,11 +19,14 @@ import com.focusflow.core.timer.TimerType;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextArea;
@@ -30,6 +34,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -48,29 +53,27 @@ import javafx.stage.Stage;
  * management,
  * a Pomodoro timer, and user interactions for productivity tracking.
  *
- * <p>
- * This class is responsible for initializing the main scene, handling UI
- * interactions,
- * and reacting to timer events such as starting, pausing, resuming, completing,
- * etc.
- * </p>
- *
  * @author Miles Baack, Emilio Lopez, and Brisa Rueda
- * @version 3.0.0
+ * @version 4.0.0
  */
-
 public class App extends Application implements TimerEventListener {
-    private PomodoroTimer timer;
+    private PomodoroTimer workTimer;
+    private PomodoroTimer breakTimer;
     private SessionManager sessionManager;
+    private QuestManager questManager;
+    private AchievementManager achievementManager;
+    private XpManager xpManager;
+    private QuestAndStatsGUI questStatsGUI;
     private Task currentTask;
     private List<Task> tasks = new ArrayList<>();
-    private List<HBox> taskRows = new ArrayList<>();
-    private int selectedTaskIndex = -1;
+    private boolean isOnBreak = false;
 
     // UI Components
     private Label timerLabel;
+    private Label timerTypeLabel;
     private ProgressBar progressBar;
     private Button startButton;
+    private Button startWorkingButton;
     private MediaPlayer backgroundMusic;
     private boolean isMuted = false;
     private TextArea notepadArea;
@@ -79,170 +82,234 @@ public class App extends Application implements TimerEventListener {
     private ImageView soundIcon;
     private AnchorPane infoPane;
     private boolean isInfoOpen = false;
-    private VBox taskBox;
     private Font pixelFont;
-
-    // Gamification Components
-    private QuestAndStatsGUI questAndStatsGUI;
-    private List<FocusSession> completedSessions = new ArrayList<>();
-
-    /**
-     * Starts the FocusFlow JavaFX application.
-     * Initializes the scene, components, and user interface layout.
-     *
-     * @param stage The primary stage for this application.
-     */
+    private Label questProgressLabel;
 
     @Override
     public void start(Stage stage) {
+        loadPixelFont();
+        initializeManagers();
+        setupUI(stage);
+        setupBackgroundMusic();
 
+        // Set up the main scene
+        Scene scene = new Scene(createMainLayout(), 1070, 610);
+        stage.setScene(scene);
+        stage.setTitle("FocusFlow");
+        stage.setResizable(false);
+        stage.show();
+    }
+
+    private void loadPixelFont() {
         try {
             InputStream is = getClass().getResourceAsStream("/UI/pixel.ttf");
             if (is != null) {
                 pixelFont = Font.loadFont(is, 24);
             } else {
-                // Fallback to a system font that looks pixelated
                 pixelFont = Font.font("Courier New", FontWeight.BOLD, 24);
             }
         } catch (Exception e) {
-            // Fallback to a system font that looks pixelated
             pixelFont = Font.font("Courier New", FontWeight.BOLD, 24);
         }
+    }
 
-        // Initialize components
+    private void initializeManagers() {
         sessionManager = new SessionManager();
-        timer = new PomodoroTimer(TimerType.WORK, 35 * 60); // 35 minutes
-        timer.addListener(this);
-        initializeGameification(); // Initialize gameification
+        achievementManager = new AchievementManager();
+        xpManager = new XpManager();
+        questManager = new QuestManager(achievementManager, xpManager);
 
-        // Load main background
-        Image backgroundImage = new Image(getClass().getResource("/UI/focusflowBG.png").toString());
-        ImageView background = new ImageView(backgroundImage);
+        // Initialize the integrated QuestAndStatsGUI
+        questStatsGUI = new QuestAndStatsGUI(questManager, achievementManager, xpManager, pixelFont);
 
-        // Main layout
+        // Initialize timers
+        workTimer = new PomodoroTimer(TimerType.WORK, 25 * 60); // 25 minutes
+        breakTimer = new PomodoroTimer(TimerType.SHORT_BREAK, 5 * 60); // 5 minutes
+        workTimer.addListener(this);
+        breakTimer.addListener(this);
+    }
+
+    private AnchorPane createMainLayout() {
         AnchorPane root = new AnchorPane();
 
-        // Set background to fill entire scene
+        // Load and set background
+        Image backgroundImage = new Image(getClass().getResource("/UI/focusflowBG.png").toString());
+        ImageView background = new ImageView(backgroundImage);
         background.setFitWidth(1070);
         background.setFitHeight(620);
-        background.setPreserveRatio(false); // This allows stretching
+        background.setPreserveRatio(false);
         AnchorPane.setTopAnchor(background, 0.0);
         AnchorPane.setLeftAnchor(background, 0.0);
-        AnchorPane.setRightAnchor(background, 0.0);
-        AnchorPane.setBottomAnchor(background, 0.0);
         root.getChildren().add(background);
 
-        // Create sidebar (white panel on the left)
-        Rectangle sidebar = new Rectangle(70, 600);
-        sidebar.setFill(Color.WHITE);
-        AnchorPane.setLeftAnchor(sidebar, 0.0);
-        AnchorPane.setTopAnchor(sidebar, 0.0);
+        // Create sidebar
+        createSidebar(root);
 
-        // Sidebar icons
+        // Create main timer area
+        createTimerArea(root);
+
+        // Create control buttons
+        createControlButtons(root);
+
+        // Create progress area
+        createProgressArea(root);
+
+        // Create top controls
+        createTopControls(root);
+
+        // Create overlays
+        createOverlays(root);
+
+        return root;
+    }
+
+    private void createSidebar(AnchorPane root) {
         VBox sidebarIcons = new VBox(20);
-        sidebarIcons.setPadding(new Insets(0, 0, 0, 45)); // Add padding from the left
-        sidebarIcons.setAlignment(Pos.CENTER); // Vertically center the VBox
-        sidebarIcons.setSpacing(30); // Increase spacing between icons
+        sidebarIcons.setPadding(new Insets(0, 0, 0, 45));
+        sidebarIcons.setAlignment(Pos.CENTER);
+        sidebarIcons.setSpacing(30);
         AnchorPane.setLeftAnchor(sidebarIcons, 0.0);
         AnchorPane.setTopAnchor(sidebarIcons, 0.0);
-        AnchorPane.setBottomAnchor(sidebarIcons, 0.0); // Ensure it stretches vertically
+        AnchorPane.setBottomAnchor(sidebarIcons, 0.0);
 
         final int ICON_SIZE = 50;
+
         // Add task button
-        Image addTaskImg = new Image(getClass().getResource("/UI/AddTask.png").toString(), ICON_SIZE, ICON_SIZE, true,
-                true);
-        ImageView addTaskIcon = new ImageView(addTaskImg);
+        ImageView addTaskIcon = new ImageView(new Image(
+                getClass().getResource("/UI/AddTask.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
         StackPane addTaskBtn = new StackPane(addTaskIcon);
-
         addTaskBtn.setStyle("-fx-cursor: hand;");
+        addTaskBtn.setOnMouseClicked(e -> showCreateTaskDialog());
 
-        // Stats icon
-        Image statsImg = new Image(getClass().getResource("/UI/StatsIcon.png").toString(), ICON_SIZE, ICON_SIZE, true,
-                true);
-        ImageView statsIcon = new ImageView(statsImg);
-        StackPane statsBtn = new StackPane(statsIcon);
-        statsBtn.setStyle("-fx-cursor: hand;");
+        // Task management button (changed from stats to use integrated system)
+        ImageView taskMgmtIcon = new ImageView(new Image(
+                getClass().getResource("/UI/StatsIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+        StackPane taskMgmtBtn = new StackPane(taskMgmtIcon);
+        taskMgmtBtn.setStyle("-fx-cursor: hand;");
+        taskMgmtBtn.setOnMouseClicked(e -> openStatisticsAndManagement());
 
         // Calendar icon
-        Image calendarImg = new Image(getClass().getResource("/UI/CalendarIcon.png").toString(), ICON_SIZE, ICON_SIZE,
-                true, true);
-        ImageView calendarIcon = new ImageView(calendarImg);
+        ImageView calendarIcon = new ImageView(new Image(
+                getClass().getResource("/UI/CalendarIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
         StackPane calendarBtn = new StackPane(calendarIcon);
         calendarBtn.setStyle("-fx-cursor: hand;");
 
         // Question icon
-        Image questionImg = new Image(getClass().getResource("/UI/question.png").toString(), ICON_SIZE, ICON_SIZE, true,
-                true);
-        ImageView questionIcon = new ImageView(questionImg);
+        ImageView questionIcon = new ImageView(new Image(
+                getClass().getResource("/UI/question.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
         StackPane questionBtn = new StackPane(questionIcon);
         questionBtn.setStyle("-fx-cursor: hand;");
+        questionBtn.setOnMouseClicked(e -> toggleInfo());
 
-        // Add all icons to sidebar
-        sidebarIcons.getChildren().addAll(addTaskBtn, statsBtn, calendarBtn, questionBtn);
+        sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, calendarBtn, questionBtn);
+        root.getChildren().add(sidebarIcons);
+    }
 
-        // Timer display (in the clock)
-        timerLabel = new Label("00:00");
-        timerLabel.setFont(Font.font(pixelFont.getFamily(), 80)); // Set font size directly
+    private void createTimerArea(AnchorPane root) {
+        // Timer display
+        timerLabel = new Label("25:00");
+        timerLabel.setFont(Font.font(pixelFont.getFamily(), 80));
         timerLabel.setTextFill(Color.BLACK);
-        // increase font size for better visibility
         AnchorPane.setTopAnchor(timerLabel, 170.0);
         AnchorPane.setRightAnchor(timerLabel, 170.0);
 
+        // Timer type label
+        timerTypeLabel = new Label("WORK SESSION");
+        timerTypeLabel.setFont(Font.font(pixelFont.getFamily(), 24));
+        timerTypeLabel.setTextFill(Color.BLACK);
+        AnchorPane.setTopAnchor(timerTypeLabel, 140.0);
+        AnchorPane.setRightAnchor(timerTypeLabel, 170.0);
+
         // "REMAINING..." text under timer
         Label remainingLabel = new Label("REMAINING...");
-        remainingLabel.setFont(Font.font(pixelFont.getFamily(), 24)); // Set font size directly
+        remainingLabel.setFont(Font.font(pixelFont.getFamily(), 24));
         remainingLabel.setTextFill(Color.BLACK);
         AnchorPane.setTopAnchor(remainingLabel, 240.0);
         AnchorPane.setRightAnchor(remainingLabel, 170.0);
 
-        // Start button
+        root.getChildren().addAll(timerLabel, timerTypeLabel, remainingLabel);
+    }
+
+    private void createControlButtons(AnchorPane root) {
+        // Start working on task button
+        startWorkingButton = new Button("Start Working");
+        startWorkingButton.setFont(Font.font(pixelFont.getFamily(), 20));
+        startWorkingButton
+                .setStyle("-fx-background-color:rgb(102, 204, 102); -fx-text-fill: white; -fx-background-radius: 15;");
+        startWorkingButton.setPrefSize(120, 35);
+        AnchorPane.setTopAnchor(startWorkingButton, 390.0);
+        AnchorPane.setRightAnchor(startWorkingButton, 220.0);
+        startWorkingButton.setOnAction(e -> showTaskSelection());
+
+        // Start/Pause button
         startButton = new Button("START");
         startButton.setFont(Font.font(pixelFont.getFamily(), 24));
         startButton
                 .setStyle("-fx-background-color:rgb(255, 255, 255); -fx-text-fill: black; -fx-background-radius: 15;");
-        startButton.setPrefSize(80, 25);
-        AnchorPane.setTopAnchor(startButton, 395.0);
-        AnchorPane.setRightAnchor(startButton, 190.0);
+        startButton.setPrefSize(80, 35);
+        AnchorPane.setTopAnchor(startButton, 390.0);
+        AnchorPane.setRightAnchor(startButton, 120.0);
+        startButton.setOnAction(e -> toggleTimer());
 
-        // Task list (near the left side)
-        taskBox = new VBox(10);
-        taskBox.setPadding(new Insets(40));
-        AnchorPane.setTopAnchor(taskBox, 160.0);
-        AnchorPane.setLeftAnchor(taskBox, 100.0);
+        root.getChildren().addAll(startWorkingButton, startButton);
+    }
 
-        // Let's Go button
-        Button letsGoButton = new Button("Let's Go!");
-        letsGoButton
-                .setStyle("-fx-background-color:rgb(244, 214, 42); -fx-text-fill: black; -fx-background-radius: 10;");
-        letsGoButton.setFont(Font.font(pixelFont.getFamily(), 20));
-        AnchorPane.setTopAnchor(letsGoButton, 470.0);
-        AnchorPane.setRightAnchor(letsGoButton, 10.0);
+    private void createProgressArea(AnchorPane root) {
+        // Quest progress label
+        questProgressLabel = new Label("No active quest");
+        questProgressLabel.setFont(Font.font(pixelFont.getFamily(), 18));
+        questProgressLabel.setTextFill(Color.BLACK);
+        AnchorPane.setBottomAnchor(questProgressLabel, 100.0);
+        AnchorPane.setLeftAnchor(questProgressLabel, 20.0);
 
         // Progress bar
-        progressBar = new ProgressBar(0.5); // Initial value showing example
+        progressBar = new ProgressBar(0.0);
         progressBar.setPrefWidth(950);
         progressBar.setPrefHeight(48);
         progressBar.setStyle("-fx-accent:rgb(255, 209, 3);");
         AnchorPane.setBottomAnchor(progressBar, 40.0);
         AnchorPane.setLeftAnchor(progressBar, 20.0);
 
-        // Sound icon in top right
+        // Star icon
+        ImageView starIcon = new ImageView(new Image(
+                getClass().getResource("/UI/star.png").toString(), 60, 60, true, true));
+        AnchorPane.setBottomAnchor(starIcon, 50.0);
+        AnchorPane.setRightAnchor(starIcon, 10.0);
+
+        root.getChildren().addAll(questProgressLabel, progressBar, starIcon);
+    }
+
+    private void createTopControls(AnchorPane root) {
+        // Sound icon
         Image soundImg = new Image(getClass().getResource("/UI/sound.png").toString(), 40, 40, true, true);
         soundIcon = new ImageView(soundImg);
         StackPane soundBtn = new StackPane(soundIcon);
         soundBtn.setStyle("-fx-cursor: hand;");
         AnchorPane.setTopAnchor(soundBtn, 20.0);
         AnchorPane.setRightAnchor(soundBtn, 20.0);
+        soundBtn.setOnMouseClicked(e -> toggleSound());
 
-        // Notepad icon in top right
-        Image notepadImg = new Image(getClass().getResource("/UI/Notepad.png").toString(), 40, 40, true, true);
-        ImageView notepadIcon = new ImageView(notepadImg);
+        // Notepad icon
+        ImageView notepadIcon = new ImageView(new Image(
+                getClass().getResource("/UI/Notepad.png").toString(), 40, 40, true, true));
         StackPane notepadBtn = new StackPane(notepadIcon);
         notepadBtn.setStyle("-fx-cursor: hand;");
         AnchorPane.setTopAnchor(notepadBtn, 20.0);
         AnchorPane.setRightAnchor(notepadBtn, 80.0);
+        notepadBtn.setOnMouseClicked(e -> toggleNotepad());
 
-        // Notepad panel (hidden initially)
+        root.getChildren().addAll(soundBtn, notepadBtn);
+    }
+
+    private void createOverlays(AnchorPane root) {
+        // Notepad panel
+        createNotepadPane(root);
+
+        // Info panel
+        createInfoPane(root);
+    }
+
+    private void createNotepadPane(AnchorPane root) {
         notepadPane = new AnchorPane();
         Rectangle notepadBg = new Rectangle(200, 300);
         notepadBg.setFill(Color.WHITE);
@@ -263,26 +330,27 @@ public class App extends Application implements TimerEventListener {
         AnchorPane.setTopAnchor(notepadPane, 70.0);
         AnchorPane.setRightAnchor(notepadPane, 80.0);
 
-        // Info panel (hidden initially)
+        root.getChildren().add(notepadPane);
+    }
+
+    private void createInfoPane(AnchorPane root) {
         infoPane = new AnchorPane();
         Rectangle infoBg = new Rectangle(400, 300);
         infoBg.setFill(Color.WHITE);
         infoBg.setStroke(Color.BLACK);
 
-        Label infoTitle = new Label("About");
+        Label infoTitle = new Label("About FocusFlow");
         infoTitle.setFont(Font.font(pixelFont.getFamily(), 20));
 
         TextArea infoText = new TextArea();
         infoText.setFont(Font.font(pixelFont.getFamily(), 17));
-        infoText.setText("FocusFlow is a productivity app that helps you focus on tasks.\n\n" +
-                "- Add tasks with the + button\n" +
-                "- Select a task to start the timer\n" +
-                "- Tasks are automatically marked as completed when the timer ends\n" +
-                "- Progress bar fills as you complete tasks\n" +
-                "- Use the notepad for quick notes\n" +
-                "- Toggle background music with the sound button\n" +
-                "- Create quests to group related tasks\n" +
-                "- Earn XP and achievements for productivity!");
+        infoText.setText("FocusFlow - Productivity with Gamification\n\n" +
+                "• Create tasks and organize them into quests\n" +
+                "• Use Pomodoro technique: 25min work + 5min break\n" +
+                "• Earn XP and unlock achievements\n" +
+                "• Track your productivity with detailed analytics\n" +
+                "• Use the task management screen to organize work\n" +
+                "• Click 'Start Working' to select a task and begin");
         infoText.setWrapText(true);
         infoText.setEditable(false);
 
@@ -301,91 +369,14 @@ public class App extends Application implements TimerEventListener {
         AnchorPane.setTopAnchor(infoPane, 150.0);
         AnchorPane.setLeftAnchor(infoPane, 150.0);
 
-        // Add a star icon at the bottom right of progress bar
-        Image starImg = new Image(getClass().getResource("/UI/star.png").toString(),
-                60, 60, true, true);
-        ImageView starIcon = new ImageView(starImg);
-        AnchorPane.setBottomAnchor(starIcon, 50.0);
-        AnchorPane.setRightAnchor(starIcon, 10.0);
+        root.getChildren().add(infoPane);
+    }
 
-        // Add components to root
-        root.getChildren().addAll(
-                // sidebar,
-                sidebarIcons,
-                timerLabel,
-                remainingLabel,
-                startButton,
-                taskBox,
-                progressBar,
-                soundBtn,
-                notepadBtn,
-                notepadPane,
-                infoPane,
-                letsGoButton, starIcon);
+    private void setupUI(Stage stage) {
+        // UI setup is now handled in createMainLayout()
+    }
 
-        // Button actions
-        startButton.setOnAction(e -> toggleTimer());
-
-        // Updated Add Task Button Handler with Quest Creation
-        addTaskBtn.setOnMouseClicked(e -> {
-            // Show choice dialog: Create individual task or create quest
-            Stage choiceStage = new Stage();
-            choiceStage.initModality(Modality.APPLICATION_MODAL);
-            choiceStage.initOwner(stage);
-            choiceStage.setTitle("Add Task or Quest");
-
-            VBox choiceLayout = new VBox(20);
-            choiceLayout.setAlignment(Pos.CENTER);
-            choiceLayout.setPadding(new Insets(30));
-
-            Label choiceLabel = new Label("What would you like to create?");
-            choiceLabel.setFont(Font.font(pixelFont.getFamily(), 16));
-
-            HBox buttonBox = new HBox(15);
-            buttonBox.setAlignment(Pos.CENTER);
-
-            Button taskButton = new Button("Single Task");
-            taskButton.setFont(pixelFont);
-            taskButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 10px 20px;");
-            taskButton.setOnAction(taskEvent -> {
-                choiceStage.close();
-                showAddTaskDialog(stage);
-            });
-
-            Button questButton = new Button("Quest (Multiple Tasks)");
-            questButton.setFont(pixelFont);
-            questButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-padding: 10px 20px;");
-            questButton.setOnAction(questEvent -> {
-                choiceStage.close();
-                questAndStatsGUI.showQuestCreationDialog(stage, tasks);
-                refreshTaskDisplay(); // Refresh to show any new tasks from quests
-            });
-
-            buttonBox.getChildren().addAll(taskButton, questButton);
-            choiceLayout.getChildren().addAll(choiceLabel, buttonBox);
-
-            Scene choiceScene = new Scene(choiceLayout, 400, 150);
-            choiceStage.setScene(choiceScene);
-            choiceStage.showAndWait();
-        });
-
-        statsBtn.setOnMouseClicked(e -> {
-            System.out.println("Stats button clicked");
-            openStats();
-        });
-
-        calendarBtn.setOnMouseClicked(e -> {
-            // Placeholder for calendar functionality
-            System.out.println("Calendar button clicked");
-        });
-
-        soundBtn.setOnMouseClicked(e -> toggleSound());
-
-        notepadBtn.setOnMouseClicked(e -> toggleNotepad());
-
-        questionBtn.setOnMouseClicked(e -> toggleInfo());
-
-        // Setup background music
+    private void setupBackgroundMusic() {
         try {
             Media sound = new Media(getClass().getResource("/UI/background_music.wav").toString());
             backgroundMusic = new MediaPlayer(sound);
@@ -394,191 +385,209 @@ public class App extends Application implements TimerEventListener {
         } catch (Exception e) {
             System.out.println("Could not load background music: " + e.getMessage());
         }
-
-        // Set up the main scene
-        Scene scene = new Scene(root, 1070, 610);
-        stage.setScene(scene);
-        stage.setTitle("FocusFlow");
-
-        stage.setResizable(false);
-        stage.show();
     }
 
-    /**
-     * Adds a task to the UI task list.
-     *
-     * @param task  The Task object to add.
-     * @param index The index of the task in the list.
-     */
-
-    private void addTaskToUI(Task task, int index) {
-        HBox taskRow = new HBox(10);
-
-        // Create the checkbox
-        CheckBox checkbox = new CheckBox();
-        checkbox.setSelected(task.isComplete());
-
-        // Create the task label
-        Label taskLabel = new Label(task.getName());
-        taskLabel.setPrefWidth(150);
-        taskLabel.setFont(Font.font(pixelFont.getFamily(), 30));
-
-        // Add style for selection
-        if (index == selectedTaskIndex) {
-            taskLabel.setStyle("-fx-text-fill:rgb(27, 9, 163); -fx-font-weight: bold;");
-        } else {
-            taskLabel.setStyle("-fx-text-fill: black;");
-        }
-
-        taskRow.getChildren().addAll(checkbox, taskLabel);
-
-        // Add click handler for label (selecting task)
-        taskLabel.setOnMouseClicked(e -> {
-            selectTask(index);
-        });
-
-        // Add click handler for checkbox (marking task complete)
-        checkbox.setOnAction(e -> {
-            if (checkbox.isSelected()) {
-                tasks.get(index).markAsCompleted();
-                updateProgressBar();
-            } else {
-                tasks.get(index).markAsIncomplete();
-                updateProgressBar();
-            }
-        });
-
-        // Add to task rows list and to the UI
-        taskRows.add(taskRow);
-        taskBox.getChildren().add(taskRow);
-    }
-
-    /**
-     * Selects a task from the task list by its index.
-     * Updates the UI and sets the current timer duration.
-     *
-     * @param index The index of the task to select.
-     */
-
-    private void selectTask(int index) {
-        // Deselect previous task
-        if (selectedTaskIndex == index) {
-            return; // Already selected
-        }
-        if (selectedTaskIndex >= 0 && selectedTaskIndex < taskRows.size()) {
-            Label previousLabel = (Label) taskRows.get(selectedTaskIndex).getChildren().get(1);
-            previousLabel.setStyle("-fx-text-fill: black;");
-        }
-
-        // Select new task
-        selectedTaskIndex = index;
-        if (index >= 0 && index < taskRows.size()) {
-            Label newLabel = (Label) taskRows.get(index).getChildren().get(1);
-            newLabel.setStyle("-fx-text-fill:rgb(49, 91, 40); -fx-font-weight: bold;");
-
-            // Set as current task
-            currentTask = tasks.get(index);
-            System.out.println("Selected task: " + currentTask.getId() + " - " + currentTask.getName() + " duration: "
-                    + currentTask.getDuration());
-            // Get task duration from its description
-            int minutes = currentTask.getDuration();
-
-            // Parse the duration
-            // Reset and reconfigure timer for this task
-            timer.reset();
-            timer = new PomodoroTimer(TimerType.WORK, minutes * 60);
-            timer.addListener(this);
-
-            // Update timer display
-            updateTimerDisplay(minutes * 60);
-        }
-    }
-
-    /**
-     * Displays a dialog window to input and add a new task.
-     *
-     * @param parentStage The parent stage from which the dialog is opened.
-     */
-
-    private void showAddTaskDialog(Stage parentStage) {
+    private void showCreateTaskDialog() {
         Stage dialog = new Stage();
-        dialog.initOwner(parentStage);
-        dialog.setTitle("Add Task");
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle("Create New Task");
 
-        VBox dialogVbox = new VBox(10);
-        dialogVbox.setPadding(new Insets(20));
+        GridPane grid = new GridPane();
+        grid.setPadding(new Insets(20));
+        grid.setHgap(10);
+        grid.setVgap(10);
 
-        TextField taskNameField = new TextField();
-        taskNameField.setPromptText("Task Name");
+        // Task name
+        Label nameLabel = new Label("Task Name:");
+        TextField nameField = new TextField();
+        nameField.setPromptText("Enter task name");
 
-        TextField durationField = new TextField();
-        durationField.setPromptText("Duration in minutes");
+        // Task description
+        Label descLabel = new Label("Description:");
+        TextArea descArea = new TextArea();
+        descArea.setPromptText("Enter task description (optional)");
+        descArea.setPrefRowCount(3);
+        descArea.setWrapText(true);
 
-        Button addButton = new Button("Add Task");
-        addButton.setOnAction(e -> {
-            String taskName = taskNameField.getText();
-            if (!taskName.isEmpty() && !durationField.getText().isEmpty()) {
-                Task newTask = new Task(taskName, "");
-                System.out.println("Adding task: " + newTask.getId() + " - " + taskName);
-                // Store the selected duration in the task description (as a hacky way to save
-                // it)
-                newTask.setDuration(Integer.parseInt(durationField.getText()));
-                tasks.add(newTask);
+        // Priority
+        Label priorityLabel = new Label("Priority:");
+        ComboBox<TaskPriority> priorityCombo = new ComboBox<>();
+        priorityCombo.setItems(FXCollections.observableArrayList(TaskPriority.values()));
+        priorityCombo.setValue(TaskPriority.MEDIUM);
 
-                int newIndex = tasks.size() - 1;
-                addTaskToUI(newTask, newIndex);
+        // Due date
+        Label dueDateLabel = new Label("Due Date:");
+        DatePicker dueDatePicker = new DatePicker();
 
-                // Automatically select the new task
-                selectTask(newIndex);
+        // Quest assignment
+        Label questLabel = new Label("Assign to Quest:");
+        ComboBox<String> questCombo = new ComboBox<>();
+        updateQuestComboBox(questCombo);
 
-                // Update progress bar
-                updateProgressBar();
+        // Buttons
+        Button saveButton = new Button("Save Task");
+        Button cancelButton = new Button("Cancel");
+
+        saveButton.setOnAction(e -> {
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                showAlert("Error", "Task name cannot be empty!");
+                return;
+            }
+
+            Task newTask = new Task(name, descArea.getText().trim());
+            newTask.setPriority(priorityCombo.getValue());
+
+            if (dueDatePicker.getValue() != null) {
+                newTask.setDueDateTime(dueDatePicker.getValue().atStartOfDay());
+            }
+
+            tasks.add(newTask);
+
+            // Add to quest if selected
+            String selectedQuest = questCombo.getValue();
+            if (selectedQuest != null && !selectedQuest.equals("No Quest")) {
+                // Find quest by title and add task
+                questManager.getAllQuests().values().stream()
+                        .filter(quest -> quest.getTitle().equals(selectedQuest))
+                        .findFirst()
+                        .ifPresent(quest -> questManager.addTaskToQuest(quest.getId(), newTask));
+            }
+
+            updateQuestProgress();
+            dialog.close();
+        });
+
+        cancelButton.setOnAction(e -> dialog.close());
+
+        // Layout
+        grid.add(nameLabel, 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(descLabel, 0, 1);
+        grid.add(descArea, 1, 1);
+        grid.add(priorityLabel, 0, 2);
+        grid.add(priorityCombo, 1, 2);
+        grid.add(dueDateLabel, 0, 3);
+        grid.add(dueDatePicker, 1, 3);
+        grid.add(questLabel, 0, 4);
+        grid.add(questCombo, 1, 4);
+
+        HBox buttonBox = new HBox(10);
+        buttonBox.getChildren().addAll(saveButton, cancelButton);
+        grid.add(buttonBox, 1, 5);
+
+        Scene scene = new Scene(grid, 400, 350);
+        dialog.setScene(scene);
+        dialog.showAndWait();
+    }
+
+    private void updateQuestComboBox(ComboBox<String> questCombo) {
+        List<String> questTitles = new ArrayList<>();
+        questTitles.add("No Quest");
+        questManager.getAllQuests().values().forEach(quest -> questTitles.add(quest.getTitle()));
+        questCombo.setItems(FXCollections.observableArrayList(questTitles));
+        questCombo.setValue("No Quest");
+    }
+
+    private void showTaskSelection() {
+        List<Task> incompleteTasks = tasks.stream()
+                .filter(task -> !task.isComplete())
+                .toList();
+
+        if (incompleteTasks.isEmpty()) {
+            showAlert("No Tasks", "No incomplete tasks available. Create a task first!");
+            return;
+        }
+
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setTitle("Select Task to Work On");
+
+        VBox layout = new VBox(15);
+        layout.setPadding(new Insets(20));
+
+        Label titleLabel = new Label("Choose a task to start working on:");
+        titleLabel.setFont(Font.font(pixelFont.getFamily(), 16));
+
+        ComboBox<Task> taskCombo = new ComboBox<>();
+        taskCombo.setItems(FXCollections.observableArrayList(incompleteTasks));
+        taskCombo.setCellFactory(listView -> new TaskListCell());
+        taskCombo.setButtonCell(new TaskListCell());
+
+        Button startButton = new Button("Start Working");
+        Button cancelButton = new Button("Cancel");
+
+        startButton.setOnAction(e -> {
+            Task selectedTask = taskCombo.getValue();
+            if (selectedTask != null) {
+                currentTask = selectedTask;
+                workTimer.setCurrentTaskId(selectedTask.getId().toString());
+
+                // Reset timer to work mode if on break
+                if (isOnBreak) {
+                    switchToWorkMode();
+                }
+
+                // Auto-start the timer
+                if (workTimer.getState() != TimerState.RUNNING) {
+                    workTimer.start();
+                }
 
                 dialog.close();
             }
         });
 
-        dialogVbox.getChildren().addAll(
-                new Label("Task Name:"),
-                taskNameField,
-                new Label("Duration:"),
-                durationField,
-                addButton);
+        cancelButton.setOnAction(e -> dialog.close());
 
-        Scene dialogScene = new Scene(dialogVbox, 300, 200);
-        dialog.setScene(dialogScene);
+        HBox buttonBox = new HBox(10);
+        buttonBox.getChildren().addAll(startButton, cancelButton);
+
+        layout.getChildren().addAll(titleLabel, taskCombo, buttonBox);
+
+        Scene scene = new Scene(layout, 400, 200);
+        dialog.setScene(scene);
         dialog.showAndWait();
     }
 
-    /**
-     * Toggles the Pomodoro timer between start and pause states.
-     */
+    private void openTaskManagement() {
+        TaskManagementWindow taskMgmt = new TaskManagementWindow(tasks, questManager, pixelFont);
+        taskMgmt.setOnTasksUpdated(() -> updateQuestProgress());
+        taskMgmt.show();
+    }
+
+    private void openStatisticsAndManagement() {
+        // Use the integrated QuestAndStatsGUI which includes both stats and management
+        Stage currentStage = (Stage) startButton.getScene().getWindow();
+        questStatsGUI.showStatisticsWindow(currentStage, tasks, sessionManager.getSessionHistory());
+    }
 
     private void toggleTimer() {
-        if (timer.getState() == TimerState.RUNNING) {
-            timer.pause();
+        PomodoroTimer currentTimer = isOnBreak ? breakTimer : workTimer;
+
+        if (currentTimer.getState() == TimerState.RUNNING) {
+            currentTimer.pause();
             startButton.setText("START");
         } else {
-            if (selectedTaskIndex >= 0) {
-                System.out.println("Starting timer for task: " + selectedTaskIndex);
-                currentTask = tasks.get(selectedTaskIndex);
-                System.out.println("Current task ID: " + (currentTask != null ? currentTask.getId() : "null"));
-                if (currentTask != null && currentTask.getId() != null && !currentTask.getId().toString().isEmpty()) {
-                    timer.setCurrentTaskId(currentTask.getId().toString());
-                    timer.start();
-                    startButton.setText("PAUSE");
-                } else {
-                    System.out.println("Error: Task ID is null or empty. Cannot start the timer.");
-                }
-            } else {
-                System.out.println("Error: No task selected. Cannot start the timer.");
+            if (!isOnBreak && currentTask == null) {
+                showAlert("No Task Selected", "Please select a task first using 'Start Working' button!");
+                return;
             }
+            currentTimer.start();
+            startButton.setText("PAUSE");
         }
     }
 
-    /**
-     * Toggles background music playback and updates the UI icon.
-     */
+    private void switchToWorkMode() {
+        isOnBreak = false;
+        timerTypeLabel.setText("WORK SESSION");
+        updateTimerDisplay(25 * 60);
+    }
+
+    private void switchToBreakMode() {
+        isOnBreak = true;
+        timerTypeLabel.setText("BREAK TIME");
+        updateTimerDisplay(5 * 60);
+    }
 
     private void toggleSound() {
         if (isMuted) {
@@ -595,419 +604,96 @@ public class App extends Application implements TimerEventListener {
         isMuted = !isMuted;
     }
 
-    /**
-     * Shows or hides the notepad overlay panel.
-     */
-
     private void toggleNotepad() {
         notepadPane.setVisible(!isNotepadOpen);
         isNotepadOpen = !isNotepadOpen;
     }
 
-    /**
-     * Toggles the display of the informational help panel.
-     */
-
     private void toggleInfo() {
-        System.out.println("Toggling info pane visibility");
         infoPane.setVisible(!isInfoOpen);
         isInfoOpen = !isInfoOpen;
     }
-
-    /**
-     * Opens the comprehensive statistics window with analytics.
-     */
-    private void openStats() {
-        questAndStatsGUI.showStatisticsWindow((Stage) startButton.getScene().getWindow(), tasks, completedSessions);
-    }
-
-    /**
-     * Updates the progress bar based on completed tasks.
-     */
-
-    private void updateProgressBar() {
-        int completedTasks = 0;
-        for (Task task : tasks) {
-            if (task.isComplete()) {
-                completedTasks++;
-            }
-        }
-
-        double progress = tasks.isEmpty() ? 0 : (double) completedTasks / tasks.size();
-        progressBar.setProgress(progress);
-    }
-
-    /**
-     * Updates the on-screen timer label with the remaining time.
-     *
-     * @param seconds Remaining seconds to display.
-     */
 
     private void updateTimerDisplay(int seconds) {
         int minutes = seconds / 60;
         int remainingSeconds = seconds % 60;
         timerLabel.setText(String.format("%02d:%02d", minutes, remainingSeconds));
-        System.out.println("Updating timer display: " + String.format("%02d:%02d", minutes, remainingSeconds));
     }
 
-    // Timer Event Listener Methods
+    private void updateQuestProgress() {
+        // Find active quest (quest with incomplete tasks)
+        Optional<Quest> activeQuest = questManager.getAllQuests().values().stream()
+                .filter(quest -> !quest.isCompleted())
+                .filter(quest -> quest.getTasks().stream().anyMatch(task -> tasks.contains(task)))
+                .findFirst();
 
-    /**
-     * Called when the timer starts.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
+        if (activeQuest.isPresent()) {
+            Quest quest = activeQuest.get();
+            questProgressLabel.setText(String.format("%s: %d%% complete",
+                    quest.getTitle(), quest.getProgressPercentage()));
+        } else {
+            questProgressLabel.setText("No active quest");
+        }
+    }
 
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    // Timer Event Listeners
     @Override
     public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("PAUSE"));
     }
-
-    /**
-     * Called when the timer is paused.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
 
     @Override
     public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("START"));
     }
 
-    /**
-     * Called when the timer resumes from a paused state.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
-
     @Override
     public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("PAUSE"));
     }
-
-    /**
-     * Called when the timer completes its countdown.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
 
     @Override
     public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> {
             startButton.setText("START");
 
-            // Mark current task as completed
-            if (currentTask != null && selectedTaskIndex >= 0) {
-                currentTask.markAsCompleted();
-
-                // Track task completion in analytics
-                questAndStatsGUI.getAnalytics().trackTaskCompletion(currentTask);
-
-                // Award XP for task completion
-                int taskXp = calculateTaskXp(currentTask);
-                boolean leveledUp = questAndStatsGUI.getXpManager().addXp(taskXp);
-
-                if (leveledUp) {
-                    showLevelUpNotification();
-                }
-
-                // Update checkbox
-                if (selectedTaskIndex < taskRows.size()) {
-                    CheckBox checkbox = (CheckBox) taskRows.get(selectedTaskIndex).getChildren().get(0);
-                    checkbox.setSelected(true);
-                }
-
-                updateProgressBar();
-
-                // Check for achievement unlocks
-                checkForAchievements();
+            if (isOnBreak) {
+                // Break completed - prompt for next work session
+                switchToWorkMode();
+                showAlert("Break Complete!",
+                        "Ready for another work session?\nClick 'Start Working' to select a task.");
+            } else {
+                // Work session completed - start break
+                switchToBreakMode();
+                breakTimer.start();
+                showAlert("Work Session Complete!", "Great job! Starting a 5-minute break.");
             }
         });
     }
-
-    /**
-     * Called when the timer is manually stopped.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
 
     @Override
     public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> startButton.setText("START"));
     }
 
-    /**
-     * Called every second as the timer counts down.
-     *
-     * @param timer            The timer instance.
-     * @param remainingSeconds Seconds remaining in the countdown.
-     */
-
     @Override
     public void onTimerTick(com.focusflow.core.timer.Timer timer, int remainingSeconds) {
-        System.out.println("Timer tick: " + remainingSeconds + " seconds remaining");
         Platform.runLater(() -> updateTimerDisplay(remainingSeconds));
     }
 
-    /**
-     * Called when the timer is reset.
-     *
-     * @param timer The timer instance that triggered the event.
-     */
-
     @Override
     public void onTimerReset(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> {
-            startButton.setText("START");
-            System.out.println("Timer reset");
-        });
+        Platform.runLater(() -> startButton.setText("START"));
     }
 
-    // Gamification Methods
-
-    /**
-     * Initializes the gamification system and session tracking.
-     */
-    private void initializeGameification() {
-        // Initialize quest and stats GUI
-        questAndStatsGUI = new QuestAndStatsGUI();
-
-        // Track completed sessions for analytics
-        sessionManager.addListener(new SessionEventListener() {
-            @Override
-            public void onSessionStarted(FocusSession session) {
-                // Optional: handle session start
-            }
-
-            @Override
-            public void onSessionPaused(FocusSession session) {
-                // Optional: handle session pause
-            }
-
-            @Override
-            public void onSessionResumed(FocusSession session) {
-                // Optional: handle session resume
-            }
-
-            @Override
-            public void onSessionEnded(FocusSession session) {
-                // Add completed session to our tracking list
-                completedSessions.add(session);
-
-                // Track session in analytics
-                questAndStatsGUI.getAnalytics().trackSession(session);
-
-                // Award XP for completing session
-                int sessionXp = calculateSessionXp(session);
-                boolean leveledUp = questAndStatsGUI.getXpManager().addXp(sessionXp);
-
-                if (leveledUp) {
-                    showLevelUpNotification();
-                }
-            }
-
-            @Override
-            public void onSessionHistoryChanged(List<FocusSession> history) {
-                // Optional: handle history changes
-            }
-        });
-    }
-
-    /**
-     * Calculates XP reward for completing a focus session.
-     *
-     * @param session The completed focus session
-     * @return XP amount to award
-     */
-    private int calculateSessionXp(FocusSession session) {
-        // Base XP: 1 XP per minute of focus time
-        int baseXp = (int) (session.getDurationSeconds() / 60);
-
-        // Bonus XP for longer sessions
-        if (session.getDurationSeconds() >= 25 * 60) { // 25+ minute session
-            baseXp += 10; // Bonus for Pomodoro-length session
-        }
-
-        // Bonus for consecutive sessions
-        if (session.isConsecutive()) {
-            baseXp += 5;
-        }
-
-        return baseXp;
-    }
-
-    /**
-     * Calculates XP reward for completing a task.
-     *
-     * @param task The completed task
-     * @return XP amount to award
-     */
-    private int calculateTaskXp(Task task) {
-        int baseXp = 10; // Base XP for completing any task
-
-        // Bonus XP based on task duration
-        baseXp += task.getDuration() / 5; // 1 XP per 5 minutes
-
-        // Bonus XP based on priority
-        switch (task.getPriority()) {
-            case URGENT:
-                baseXp += 15;
-                break;
-            case HIGH:
-                baseXp += 10;
-                break;
-            case MEDIUM:
-                baseXp += 5;
-                break;
-            case LOW:
-                baseXp += 2;
-                break;
-        }
-
-        return baseXp;
-    }
-
-    /**
-     * Shows a level-up notification dialog.
-     */
-    private void showLevelUpNotification() {
-        Platform.runLater(() -> {
-            Stage levelUpStage = new Stage();
-            levelUpStage.initModality(Modality.APPLICATION_MODAL);
-            levelUpStage.setTitle("Level Up!");
-
-            VBox layout = new VBox(20);
-            layout.setAlignment(Pos.CENTER);
-            layout.setPadding(new Insets(30));
-            layout.setStyle("-fx-background-color: linear-gradient(to bottom, #FFD700, #FFA500);");
-
-            Label levelUpLabel = new Label("🎉 LEVEL UP! 🎉");
-            levelUpLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 24));
-            levelUpLabel.setTextFill(Color.WHITE);
-
-            Label newLevelLabel = new Label(
-                    "You are now level " + questAndStatsGUI.getXpManager().getCurrentLevel() + "!");
-            newLevelLabel.setFont(Font.font(pixelFont.getFamily(), 16));
-            newLevelLabel.setTextFill(Color.WHITE);
-
-            Button okButton = new Button("Awesome!");
-            okButton.setFont(pixelFont);
-            okButton.setStyle("-fx-background-color: white; -fx-text-fill: #FF9800; -fx-font-weight: bold;");
-            okButton.setOnAction(e -> levelUpStage.close());
-
-            layout.getChildren().addAll(levelUpLabel, newLevelLabel, okButton);
-
-            Scene scene = new Scene(layout, 300, 200);
-            levelUpStage.setScene(scene);
-            levelUpStage.showAndWait();
-        });
-    }
-
-    /**
-     * Checks for and unlocks achievements based on current progress.
-     */
-    private void checkForAchievements() {
-        AchievementManager achievementManager = questAndStatsGUI.getAchievementManager();
-
-        // Check various achievement conditions
-        int completedTasksCount = (int) tasks.stream().filter(Task::isComplete).count();
-
-        // Task completion achievements
-        if (completedTasksCount >= 1 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_FIRST_TASK)) {
-            achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_TASK);
-            showAchievementUnlockedNotification(Achievement.COMPLETED_FIRST_TASK);
-        }
-
-        if (completedTasksCount >= 10 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_10_TASKS)) {
-            achievementManager.unlockAchievement(Achievement.COMPLETED_10_TASKS);
-            showAchievementUnlockedNotification(Achievement.COMPLETED_10_TASKS);
-        }
-
-        if (completedTasksCount >= 50 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_50_TASKS)) {
-            achievementManager.unlockAchievement(Achievement.COMPLETED_50_TASKS);
-            showAchievementUnlockedNotification(Achievement.COMPLETED_50_TASKS);
-        }
-
-        if (completedTasksCount >= 100 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_100_TASKS)) {
-            achievementManager.unlockAchievement(Achievement.COMPLETED_100_TASKS);
-            showAchievementUnlockedNotification(Achievement.COMPLETED_100_TASKS);
-        }
-    }
-
-    /**
-     * Shows an achievement unlock notification dialog.
-     *
-     * @param achievement The achievement that was unlocked
-     */
-    private void showAchievementUnlockedNotification(Achievement achievement) {
-        Platform.runLater(() -> {
-            Stage achievementStage = new Stage();
-            achievementStage.initModality(Modality.APPLICATION_MODAL);
-            achievementStage.setTitle("Achievement Unlocked!");
-
-            VBox layout = new VBox(15);
-            layout.setAlignment(Pos.CENTER);
-            layout.setPadding(new Insets(25));
-            layout.setStyle("-fx-background-color: linear-gradient(to bottom, #4CAF50, #45a049);");
-
-            Label achievementLabel = new Label("🏆 ACHIEVEMENT UNLOCKED! 🏆");
-            achievementLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 18));
-            achievementLabel.setTextFill(Color.WHITE);
-
-            Label nameLabel = new Label(achievement.getName());
-            nameLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 16));
-            nameLabel.setTextFill(Color.WHITE);
-
-            Label descLabel = new Label(achievement.getDescription());
-            descLabel.setFont(pixelFont);
-            descLabel.setTextFill(Color.WHITE);
-            descLabel.setWrapText(true);
-            descLabel.setMaxWidth(250);
-
-            Button closeButton = new Button("Awesome!");
-            closeButton.setFont(pixelFont);
-            closeButton.setStyle("-fx-background-color: white; -fx-text-fill: #4CAF50; -fx-font-weight: bold;");
-            closeButton.setOnAction(e -> achievementStage.close());
-
-            layout.getChildren().addAll(achievementLabel, nameLabel, descLabel, closeButton);
-
-            Scene scene = new Scene(layout, 300, 200);
-            achievementStage.setScene(scene);
-            achievementStage.showAndWait();
-        });
-    }
-
-    /**
-     * Refreshes the task display to include tasks from quests.
-     */
-    private void refreshTaskDisplay() {
-        // Clear current task display
-        taskBox.getChildren().clear();
-        taskRows.clear();
-
-        // Re-add all tasks including any new ones from quests
-        for (int i = 0; i < tasks.size(); i++) {
-            addTaskToUI(tasks.get(i), i);
-        }
-
-        // Add tasks from active quests
-        for (Quest quest : questAndStatsGUI.getQuestManager().getIncompleteQuests()) {
-            for (Task questTask : quest.getTasks()) {
-                if (!tasks.contains(questTask)) {
-                    tasks.add(questTask);
-                    addTaskToUI(questTask, tasks.size() - 1);
-                }
-            }
-        }
-
-        updateProgressBar();
-    }
-
-    /**
-     * Main entry point to launch the JavaFX application.
-     *
-     * @param args Command line arguments.
-     */
     public static void main(String[] args) {
         launch(args);
     }

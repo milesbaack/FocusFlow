@@ -3,7 +3,7 @@
  * for managing tasks in the FocusFlow application.
  * 
  * @author Miles Baack
- * @version 1.1
+ * @version 1.2 - Removed duration field for simplified Pomodoro workflow
  */
 
 package com.focusflow.core.task;
@@ -21,9 +21,10 @@ import com.focusflow.core.task.TaskStatus.TaskWithStatus;
  * 
  * This class focuses on core task properties and behaviors, with support for
  * additional status tracking and property change notifications.
+ * Duration field has been removed to support simplified Pomodoro workflow.
  * 
  * @author Miles Baack & Emilio Lopez
- * @version 1.1
+ * @version 1.2
  * @see com.focusflow.core.task.TaskManager
  * @see com.focusflow.core.task.TaskStatus
  */
@@ -49,6 +50,9 @@ public class Task implements Serializable, TaskWithStatus {
     // List to store event listeners
     private final List<TaskListener> listeners = new ArrayList<>();
 
+    // Subtasks list
+    private final List<Task> subtasks = new ArrayList<>();
+
     /**
      * Constructs a new Task with the specified name and description.
      * 
@@ -68,26 +72,6 @@ public class Task implements Serializable, TaskWithStatus {
         this.isCanceled = false;
         this.priority = TaskPriority.MEDIUM;
         this.category = new TaskCategory(); // Default uncategorized
-    }
-
-    private int duration; // Add this field if it doesn't exist
-
-    /**
-     * Gets the duration of the task in minutes
-     * 
-     * @return duration in minutes
-     */
-    public int getDuration() {
-        return duration;
-    }
-
-    /**
-     * Sets the duration of the task in minutes
-     * 
-     * @param duration duration in minutes
-     */
-    public void setDuration(int duration) {
-        this.duration = duration;
     }
 
     /**
@@ -328,9 +312,7 @@ public class Task implements Serializable, TaskWithStatus {
      * @return List of subtasks
      */
     public List<Task> getSubtasks() {
-        // This method should be implemented to return actual subtasks
-        // This is a placeholder implementation
-        return new ArrayList<>();
+        return new ArrayList<>(subtasks);
     }
 
     /**
@@ -340,9 +322,8 @@ public class Task implements Serializable, TaskWithStatus {
      * @return true if added successfully
      */
     public boolean addSubtask(Task subtask) {
-        // This method should be implemented to actually add subtasks
-        // This is a placeholder implementation that just notifies listeners
-        if (subtask != null) {
+        if (subtask != null && !subtasks.contains(subtask)) {
+            subtasks.add(subtask);
             for (TaskListener listener : listeners) {
                 listener.onSubtaskAdded(this, subtask);
             }
@@ -352,14 +333,43 @@ public class Task implements Serializable, TaskWithStatus {
     }
 
     /**
+     * Removes a subtask from this task.
+     * 
+     * @param subtask The subtask to remove
+     * @return true if removed successfully
+     */
+    public boolean removeSubtask(Task subtask) {
+        if (subtasks.remove(subtask)) {
+            for (TaskListener listener : listeners) {
+                listener.onSubtaskRemoved(this, subtask);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Updates the completion status based on subtasks.
-     * If all subtasks are complete, this task is complete.
+     * If all subtasks are complete, this task is marked as complete.
      * 
      * @return true if status changed
      */
     public boolean updateCompletionStatusFromSubtasks() {
-        // This method should be implemented to check subtask completion
-        // This is a placeholder implementation
+        if (subtasks.isEmpty()) {
+            return false;
+        }
+
+        boolean allSubtasksComplete = subtasks.stream().allMatch(Task::isComplete);
+        boolean wasComplete = this.isComplete;
+
+        if (allSubtasksComplete && !wasComplete) {
+            markAsCompleted();
+            return true;
+        } else if (!allSubtasksComplete && wasComplete) {
+            markAsIncomplete();
+            return true;
+        }
+
         return false;
     }
 
