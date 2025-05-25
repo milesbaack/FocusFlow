@@ -1,39 +1,143 @@
+<!--
+    FocusFlow Project - Maven Configuration File (pom.xml)
+    
+    This file defines how our project is built, what dependencies it needs,
+    and how it should be packaged. Maven reads this file to understand
+    our project structure and requirements.
+    
+    Project Overview:
+    - A Pomodoro timer and task management application
+    - Built with JavaFX for the user interface
+    - Uses JUnit for automated testing
+    - Targets Java 21 for modern language features
+-->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    
+    <!-- Maven model version - always 4.0.0 for Maven 3+ -->
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.focusflow</groupId>
-    <artifactId>focusflow</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <!-- Project Identity: These three elements uniquely identify our project -->
+    <groupId>com.focusflow</groupId>        <!-- Organization/company identifier -->
+    <artifactId>focusflow</artifactId>      <!-- Project name -->
+    <version>1.0-SNAPSHOT</version>         <!-- Current version (SNAPSHOT = in development) -->
 
+    <!-- 
+        Project Properties: Variables we can reuse throughout this file
+        These make it easier to maintain consistent versions and settings
+    -->
     <properties>
+        <!-- Ensures our source files are read as UTF-8 text -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        
+        <!-- Java version we're targeting - using 21 for latest features -->
         <maven.compiler.release>21</maven.compiler.release>
+        
+        <!-- JavaFX version - keeping all JavaFX modules in sync -->
         <javafx.version>21.0.7</javafx.version>
     </properties>
 
+    <!-- 
+        Dependency Management: Controls versions of dependencies across the project
+        This section doesn't actually add dependencies, but sets their versions
+        when they are added in the <dependencies> section below
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- 
+                JUnit BOM (Bill of Materials): Ensures all JUnit components 
+                use compatible versions. BOM files manage version compatibility
+                for related libraries automatically.
+            -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.11.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 
+        Dependencies: External libraries our project needs to compile and run
+        Maven automatically downloads these from central repositories
+    -->
     <dependencies>
+        
+        <!-- ========== TESTING DEPENDENCIES ========== -->
+        <!-- These are only used when running tests, not in the final application -->
+        
+        <!-- 
+            JUnit Jupiter API: Provides annotations like @Test, @BeforeEach
+            This is what developers use to write tests
+            scope=test means this is only available during testing
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        
+        <!-- 
+            JUnit Jupiter Engine: Actually runs the tests
+            This is the behind-the-scenes engine that executes test methods
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ========== JAVAFX DEPENDENCIES ========== -->
+        <!-- JavaFX is our GUI framework - broken into modules for flexibility -->
+        
+        <!-- 
+            JavaFX Controls: Buttons, text fields, lists, tables, etc.
+            This provides all the basic UI components users interact with
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        
+        <!-- 
+            JavaFX FXML: Allows us to design UI layouts in XML files
+            Separates UI design from Java code, making it easier to maintain
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        
+        <!-- 
+            JavaFX Graphics: 2D graphics, shapes, images, canvas
+            Handles all the visual rendering and drawing operations
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        
+        <!-- 
+            JavaFX Base: Core JavaFX functionality and properties
+            Foundation classes that other JavaFX modules depend on
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-base</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        
+        <!-- 
+            JavaFX Media: Audio and video playback capabilities
+            Enables our app to play notification sounds and media files
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-media</artifactId>
@@ -41,24 +145,56 @@
         </dependency>
     </dependencies>
 
+    <!-- 
+        Build Configuration: Tells Maven how to compile and package our project
+        Plugins extend Maven's capabilities for specific tasks
+    -->
     <build>
         <plugins>
+            
+            <!-- 
+                Maven Compiler Plugin: Compiles our Java source code
+                Configured to use Java 21 language features and bytecode
+            -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
+                    <!-- Use the Java version specified in our properties -->
                     <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
+            
+            <!-- 
+                JavaFX Maven Plugin: Provides commands to run JavaFX applications
+                Usage: "mvn javafx:run" to start the application
+                This plugin handles JavaFX-specific runtime requirements
+            -->
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
+                    <!-- Tells the plugin which class contains our main() method -->
                     <mainClass>com.focusflow.app.App</mainClass>
                 </configuration>
             </plugin>
         </plugins>
     </build>
 </project>
+
+<!-- 
+    Common Maven Commands for this project:
+    
+    mvn clean compile          - Clean previous builds and compile source code
+    mvn test                   - Run all unit tests
+    mvn javafx:run            - Start the FocusFlow application
+    mvn clean package         - Create a JAR file of the application
+    mvn clean install         - Install the project to local Maven repository
+    
+    Troubleshooting:
+    - If builds fail, try "mvn clean" first to remove old compiled files
+    - If JavaFX issues occur, ensure you're using Java 21+
+    - If tests fail, check that test files are in src/test/java/ directory
+-->
