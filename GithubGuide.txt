@@ -1,0 +1,5 @@
+How to add changes to github
+
+git add .
+git commit -m "your changes"
+git push origin miles-branch
