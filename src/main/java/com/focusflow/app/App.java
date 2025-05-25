@@ -4,6 +4,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.focusflow.core.gameify.Achievement;
+import com.focusflow.core.gameify.AchievementManager;
+import com.focusflow.core.gameify.Quest;
+import com.focusflow.core.session.FocusSession;
+import com.focusflow.core.session.SessionEventListener;
 import com.focusflow.core.session.SessionManager;
 import com.focusflow.core.task.Task;
 import com.focusflow.core.timer.PomodoroTimer;
@@ -34,6 +39,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 /**
@@ -76,6 +82,10 @@ public class App extends Application implements TimerEventListener {
     private VBox taskBox;
     private Font pixelFont;
 
+    // Gamification Components
+    private QuestAndStatsGUI questAndStatsGUI;
+    private List<FocusSession> completedSessions = new ArrayList<>();
+
     /**
      * Starts the FocusFlow JavaFX application.
      * Initializes the scene, components, and user interface layout.
@@ -103,6 +113,7 @@ public class App extends Application implements TimerEventListener {
         sessionManager = new SessionManager();
         timer = new PomodoroTimer(TimerType.WORK, 35 * 60); // 35 minutes
         timer.addListener(this);
+        initializeGameification(); // Initialize gameification
 
         // Load main background
         Image backgroundImage = new Image(getClass().getResource("/UI/focusflowBG.png").toString());
@@ -136,13 +147,6 @@ public class App extends Application implements TimerEventListener {
         AnchorPane.setTopAnchor(sidebarIcons, 0.0);
         AnchorPane.setBottomAnchor(sidebarIcons, 0.0); // Ensure it stretches vertically
 
-        // Clock icon
-        // Image clockImg = new
-        // Image(getClass().getResource("/UI/clock.png").toString(), 40, 40, true,
-        // true);
-        // ImageView clockIcon = new ImageView(clockImg);
-        // StackPane clockBtn = new StackPane(clockIcon);
-        // clockBtn.setStyle("-fx-cursor: hand;");
         final int ICON_SIZE = 50;
         // Add task button
         Image addTaskImg = new Image(getClass().getResource("/UI/AddTask.png").toString(), ICON_SIZE, ICON_SIZE, true,
@@ -276,7 +280,9 @@ public class App extends Application implements TimerEventListener {
                 "- Tasks are automatically marked as completed when the timer ends\n" +
                 "- Progress bar fills as you complete tasks\n" +
                 "- Use the notepad for quick notes\n" +
-                "- Toggle background music with the sound button");
+                "- Toggle background music with the sound button\n" +
+                "- Create quests to group related tasks\n" +
+                "- Earn XP and achievements for productivity!");
         infoText.setWrapText(true);
         infoText.setEditable(false);
 
@@ -320,10 +326,50 @@ public class App extends Application implements TimerEventListener {
         // Button actions
         startButton.setOnAction(e -> toggleTimer());
 
-        addTaskBtn.setOnMouseClicked(e -> showAddTaskDialog(stage));
+        // Updated Add Task Button Handler with Quest Creation
+        addTaskBtn.setOnMouseClicked(e -> {
+            // Show choice dialog: Create individual task or create quest
+            Stage choiceStage = new Stage();
+            choiceStage.initModality(Modality.APPLICATION_MODAL);
+            choiceStage.initOwner(stage);
+            choiceStage.setTitle("Add Task or Quest");
+
+            VBox choiceLayout = new VBox(20);
+            choiceLayout.setAlignment(Pos.CENTER);
+            choiceLayout.setPadding(new Insets(30));
+
+            Label choiceLabel = new Label("What would you like to create?");
+            choiceLabel.setFont(Font.font(pixelFont.getFamily(), 16));
+
+            HBox buttonBox = new HBox(15);
+            buttonBox.setAlignment(Pos.CENTER);
+
+            Button taskButton = new Button("Single Task");
+            taskButton.setFont(pixelFont);
+            taskButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-padding: 10px 20px;");
+            taskButton.setOnAction(taskEvent -> {
+                choiceStage.close();
+                showAddTaskDialog(stage);
+            });
+
+            Button questButton = new Button("Quest (Multiple Tasks)");
+            questButton.setFont(pixelFont);
+            questButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-padding: 10px 20px;");
+            questButton.setOnAction(questEvent -> {
+                choiceStage.close();
+                questAndStatsGUI.showQuestCreationDialog(stage, tasks);
+                refreshTaskDisplay(); // Refresh to show any new tasks from quests
+            });
+
+            buttonBox.getChildren().addAll(taskButton, questButton);
+            choiceLayout.getChildren().addAll(choiceLabel, buttonBox);
+
+            Scene choiceScene = new Scene(choiceLayout, 400, 150);
+            choiceStage.setScene(choiceScene);
+            choiceStage.showAndWait();
+        });
 
         statsBtn.setOnMouseClicked(e -> {
-            // Placeholder for stats functionality
             System.out.println("Stats button clicked");
             openStats();
         });
@@ -383,13 +429,6 @@ public class App extends Application implements TimerEventListener {
         } else {
             taskLabel.setStyle("-fx-text-fill: black;");
         }
-
-        /**
-         * Selects a task from the task list by its index.
-         * Updates the UI and sets the current timer duration.
-         *
-         * @param index The index of the task to select.
-         */
 
         taskRow.getChildren().addAll(checkbox, taskLabel);
 
@@ -576,24 +615,10 @@ public class App extends Application implements TimerEventListener {
     }
 
     /**
-     * Opens a placeholder statistics window.
-     * Currently shows a stub message.
+     * Opens the comprehensive statistics window with analytics.
      */
-
     private void openStats() {
-        // Blank screen
-        Stage statsStage = new Stage();
-        statsStage.setTitle("Statistics");
-        VBox statsLayout = new VBox(20);
-        statsLayout.setPadding(new Insets(20));
-        Label statsLabel = new Label("Statistics coming soon.");
-        statsLabel.setFont(Font.font(pixelFont.getFamily(), 24));
-        statsLabel.setTextFill(Color.BLACK);
-        statsLayout.getChildren().add(statsLabel);
-        Scene statsScene = new Scene(statsLayout, 400, 300);
-        statsStage.setScene(statsScene);
-        statsStage.show();
-
+        questAndStatsGUI.showStatisticsWindow((Stage) startButton.getScene().getWindow(), tasks, completedSessions);
     }
 
     /**
@@ -625,7 +650,7 @@ public class App extends Application implements TimerEventListener {
         System.out.println("Updating timer display: " + String.format("%02d:%02d", minutes, remainingSeconds));
     }
 
-    // Below are Javadoc comments for the TimerEventListener interface methods:
+    // Timer Event Listener Methods
 
     /**
      * Called when the timer starts.
@@ -675,6 +700,17 @@ public class App extends Application implements TimerEventListener {
             if (currentTask != null && selectedTaskIndex >= 0) {
                 currentTask.markAsCompleted();
 
+                // Track task completion in analytics
+                questAndStatsGUI.getAnalytics().trackTaskCompletion(currentTask);
+
+                // Award XP for task completion
+                int taskXp = calculateTaskXp(currentTask);
+                boolean leveledUp = questAndStatsGUI.getXpManager().addXp(taskXp);
+
+                if (leveledUp) {
+                    showLevelUpNotification();
+                }
+
                 // Update checkbox
                 if (selectedTaskIndex < taskRows.size()) {
                     CheckBox checkbox = (CheckBox) taskRows.get(selectedTaskIndex).getChildren().get(0);
@@ -682,6 +718,9 @@ public class App extends Application implements TimerEventListener {
                 }
 
                 updateProgressBar();
+
+                // Check for achievement unlocks
+                checkForAchievements();
             }
         });
     }
@@ -724,12 +763,251 @@ public class App extends Application implements TimerEventListener {
         });
     }
 
+    // Gamification Methods
+
+    /**
+     * Initializes the gamification system and session tracking.
+     */
+    private void initializeGameification() {
+        // Initialize quest and stats GUI
+        questAndStatsGUI = new QuestAndStatsGUI();
+
+        // Track completed sessions for analytics
+        sessionManager.addListener(new SessionEventListener() {
+            @Override
+            public void onSessionStarted(FocusSession session) {
+                // Optional: handle session start
+            }
+
+            @Override
+            public void onSessionPaused(FocusSession session) {
+                // Optional: handle session pause
+            }
+
+            @Override
+            public void onSessionResumed(FocusSession session) {
+                // Optional: handle session resume
+            }
+
+            @Override
+            public void onSessionEnded(FocusSession session) {
+                // Add completed session to our tracking list
+                completedSessions.add(session);
+
+                // Track session in analytics
+                questAndStatsGUI.getAnalytics().trackSession(session);
+
+                // Award XP for completing session
+                int sessionXp = calculateSessionXp(session);
+                boolean leveledUp = questAndStatsGUI.getXpManager().addXp(sessionXp);
+
+                if (leveledUp) {
+                    showLevelUpNotification();
+                }
+            }
+
+            @Override
+            public void onSessionHistoryChanged(List<FocusSession> history) {
+                // Optional: handle history changes
+            }
+        });
+    }
+
+    /**
+     * Calculates XP reward for completing a focus session.
+     *
+     * @param session The completed focus session
+     * @return XP amount to award
+     */
+    private int calculateSessionXp(FocusSession session) {
+        // Base XP: 1 XP per minute of focus time
+        int baseXp = (int) (session.getDurationSeconds() / 60);
+
+        // Bonus XP for longer sessions
+        if (session.getDurationSeconds() >= 25 * 60) { // 25+ minute session
+            baseXp += 10; // Bonus for Pomodoro-length session
+        }
+
+        // Bonus for consecutive sessions
+        if (session.isConsecutive()) {
+            baseXp += 5;
+        }
+
+        return baseXp;
+    }
+
+    /**
+     * Calculates XP reward for completing a task.
+     *
+     * @param task The completed task
+     * @return XP amount to award
+     */
+    private int calculateTaskXp(Task task) {
+        int baseXp = 10; // Base XP for completing any task
+
+        // Bonus XP based on task duration
+        baseXp += task.getDuration() / 5; // 1 XP per 5 minutes
+
+        // Bonus XP based on priority
+        switch (task.getPriority()) {
+            case URGENT:
+                baseXp += 15;
+                break;
+            case HIGH:
+                baseXp += 10;
+                break;
+            case MEDIUM:
+                baseXp += 5;
+                break;
+            case LOW:
+                baseXp += 2;
+                break;
+        }
+
+        return baseXp;
+    }
+
+    /**
+     * Shows a level-up notification dialog.
+     */
+    private void showLevelUpNotification() {
+        Platform.runLater(() -> {
+            Stage levelUpStage = new Stage();
+            levelUpStage.initModality(Modality.APPLICATION_MODAL);
+            levelUpStage.setTitle("Level Up!");
+
+            VBox layout = new VBox(20);
+            layout.setAlignment(Pos.CENTER);
+            layout.setPadding(new Insets(30));
+            layout.setStyle("-fx-background-color: linear-gradient(to bottom, #FFD700, #FFA500);");
+
+            Label levelUpLabel = new Label("🎉 LEVEL UP! 🎉");
+            levelUpLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 24));
+            levelUpLabel.setTextFill(Color.WHITE);
+
+            Label newLevelLabel = new Label(
+                    "You are now level " + questAndStatsGUI.getXpManager().getCurrentLevel() + "!");
+            newLevelLabel.setFont(Font.font(pixelFont.getFamily(), 16));
+            newLevelLabel.setTextFill(Color.WHITE);
+
+            Button okButton = new Button("Awesome!");
+            okButton.setFont(pixelFont);
+            okButton.setStyle("-fx-background-color: white; -fx-text-fill: #FF9800; -fx-font-weight: bold;");
+            okButton.setOnAction(e -> levelUpStage.close());
+
+            layout.getChildren().addAll(levelUpLabel, newLevelLabel, okButton);
+
+            Scene scene = new Scene(layout, 300, 200);
+            levelUpStage.setScene(scene);
+            levelUpStage.showAndWait();
+        });
+    }
+
+    /**
+     * Checks for and unlocks achievements based on current progress.
+     */
+    private void checkForAchievements() {
+        AchievementManager achievementManager = questAndStatsGUI.getAchievementManager();
+
+        // Check various achievement conditions
+        int completedTasksCount = (int) tasks.stream().filter(Task::isComplete).count();
+
+        // Task completion achievements
+        if (completedTasksCount >= 1 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_FIRST_TASK)) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_FIRST_TASK);
+            showAchievementUnlockedNotification(Achievement.COMPLETED_FIRST_TASK);
+        }
+
+        if (completedTasksCount >= 10 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_10_TASKS)) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_10_TASKS);
+            showAchievementUnlockedNotification(Achievement.COMPLETED_10_TASKS);
+        }
+
+        if (completedTasksCount >= 50 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_50_TASKS)) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_50_TASKS);
+            showAchievementUnlockedNotification(Achievement.COMPLETED_50_TASKS);
+        }
+
+        if (completedTasksCount >= 100 && !achievementManager.isAchievementUnlocked(Achievement.COMPLETED_100_TASKS)) {
+            achievementManager.unlockAchievement(Achievement.COMPLETED_100_TASKS);
+            showAchievementUnlockedNotification(Achievement.COMPLETED_100_TASKS);
+        }
+    }
+
+    /**
+     * Shows an achievement unlock notification dialog.
+     *
+     * @param achievement The achievement that was unlocked
+     */
+    private void showAchievementUnlockedNotification(Achievement achievement) {
+        Platform.runLater(() -> {
+            Stage achievementStage = new Stage();
+            achievementStage.initModality(Modality.APPLICATION_MODAL);
+            achievementStage.setTitle("Achievement Unlocked!");
+
+            VBox layout = new VBox(15);
+            layout.setAlignment(Pos.CENTER);
+            layout.setPadding(new Insets(25));
+            layout.setStyle("-fx-background-color: linear-gradient(to bottom, #4CAF50, #45a049);");
+
+            Label achievementLabel = new Label("🏆 ACHIEVEMENT UNLOCKED! 🏆");
+            achievementLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 18));
+            achievementLabel.setTextFill(Color.WHITE);
+
+            Label nameLabel = new Label(achievement.getName());
+            nameLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 16));
+            nameLabel.setTextFill(Color.WHITE);
+
+            Label descLabel = new Label(achievement.getDescription());
+            descLabel.setFont(pixelFont);
+            descLabel.setTextFill(Color.WHITE);
+            descLabel.setWrapText(true);
+            descLabel.setMaxWidth(250);
+
+            Button closeButton = new Button("Awesome!");
+            closeButton.setFont(pixelFont);
+            closeButton.setStyle("-fx-background-color: white; -fx-text-fill: #4CAF50; -fx-font-weight: bold;");
+            closeButton.setOnAction(e -> achievementStage.close());
+
+            layout.getChildren().addAll(achievementLabel, nameLabel, descLabel, closeButton);
+
+            Scene scene = new Scene(layout, 300, 200);
+            achievementStage.setScene(scene);
+            achievementStage.showAndWait();
+        });
+    }
+
+    /**
+     * Refreshes the task display to include tasks from quests.
+     */
+    private void refreshTaskDisplay() {
+        // Clear current task display
+        taskBox.getChildren().clear();
+        taskRows.clear();
+
+        // Re-add all tasks including any new ones from quests
+        for (int i = 0; i < tasks.size(); i++) {
+            addTaskToUI(tasks.get(i), i);
+        }
+
+        // Add tasks from active quests
+        for (Quest quest : questAndStatsGUI.getQuestManager().getIncompleteQuests()) {
+            for (Task questTask : quest.getTasks()) {
+                if (!tasks.contains(questTask)) {
+                    tasks.add(questTask);
+                    addTaskToUI(questTask, tasks.size() - 1);
+                }
+            }
+        }
+
+        updateProgressBar();
+    }
+
     /**
      * Main entry point to launch the JavaFX application.
      *
      * @param args Command line arguments.
      */
-
     public static void main(String[] args) {
         launch(args);
     }
