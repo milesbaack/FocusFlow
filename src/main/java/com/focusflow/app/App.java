@@ -5,10 +5,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.focusflow.app.ui.BackgroundManager;
+import com.focusflow.app.ui.QuestAndStatsGUI;
+import com.focusflow.app.ui.TaskListCell;
+import com.focusflow.app.ui.TaskManagementWindow;
+import com.focusflow.app.ui.WallpaperSelectionDialog;
 import com.focusflow.core.gameify.AchievementManager;
 import com.focusflow.core.gameify.Quest;
 import com.focusflow.core.gameify.QuestManager;
 import com.focusflow.core.gameify.XpManager;
+import com.focusflow.core.preferences.UserPreferences;
 import com.focusflow.core.session.SessionManager;
 import com.focusflow.core.task.Task;
 import com.focusflow.core.task.TaskPriority;
@@ -69,6 +75,9 @@ public class App extends Application implements TimerEventListener {
     private boolean isOnBreak = false;
 
     // UI Components
+    private UserPreferences userPreferences; // settings
+    private ImageView backgroundImageView; // background image
+
     private Label timerLabel;
     private Label timerTypeLabel;
     private ProgressBar progressBar;
@@ -87,16 +96,27 @@ public class App extends Application implements TimerEventListener {
 
     @Override
     public void start(Stage stage) {
+        userPreferences = new UserPreferences();
+
         loadPixelFont();
         initializeManagers();
         setupUI(stage);
         setupBackgroundMusic();
 
-        // Set up the main scene
         Scene scene = new Scene(createMainLayout(), 1070, 610);
         stage.setScene(scene);
         stage.setTitle("FocusFlow");
-        stage.setResizable(false);
+
+        // Apply fullscreen setting from preferences
+        if (userPreferences.isFullscreenEnabled()) {
+            stage.setFullScreen(true);
+            stage.setResizable(true);
+        } else {
+            stage.setResizable(false);
+        }
+
+        setupKeyboardShortcuts(scene);
+
         stage.show();
     }
 
@@ -130,17 +150,22 @@ public class App extends Application implements TimerEventListener {
     }
 
     private AnchorPane createMainLayout() {
-        AnchorPane root = new AnchorPane();
 
         // Load and set background
-        Image backgroundImage = new Image(getClass().getResource("/UI/focusflowBG.png").toString());
-        ImageView background = new ImageView(backgroundImage);
-        background.setFitWidth(1070);
-        background.setFitHeight(620);
-        background.setPreserveRatio(false);
-        AnchorPane.setTopAnchor(background, 0.0);
-        AnchorPane.setLeftAnchor(background, 0.0);
-        root.getChildren().add(background);
+        AnchorPane root = new AnchorPane();
+
+        // Load background using BackgroundManager
+        String selectedWallpaper = userPreferences.getSelectedWallpaper();
+        backgroundImageView = BackgroundManager.createBackgroundImageView(
+                selectedWallpaper, 1070, 610);
+
+        // Make background responsive to window size changes
+        backgroundImageView.fitWidthProperty().bind(root.widthProperty());
+        backgroundImageView.fitHeightProperty().bind(root.heightProperty());
+
+        AnchorPane.setTopAnchor(backgroundImageView, 0.0);
+        AnchorPane.setLeftAnchor(backgroundImageView, 0.0);
+        root.getChildren().add(backgroundImageView);
 
         // Create sidebar
         createSidebar(root);
@@ -167,12 +192,12 @@ public class App extends Application implements TimerEventListener {
         VBox sidebarIcons = new VBox(20);
         sidebarIcons.setPadding(new Insets(0, 0, 0, 45));
         sidebarIcons.setAlignment(Pos.CENTER);
-        sidebarIcons.setSpacing(30);
+        sidebarIcons.setSpacing(25); // Reduced spacing to fit new button
         AnchorPane.setLeftAnchor(sidebarIcons, 0.0);
         AnchorPane.setTopAnchor(sidebarIcons, 0.0);
         AnchorPane.setBottomAnchor(sidebarIcons, 0.0);
 
-        final int ICON_SIZE = 50;
+        final int ICON_SIZE = 55; // Slightly smaller to fit more buttons
 
         // Add task button
         ImageView addTaskIcon = new ImageView(new Image(
@@ -181,12 +206,23 @@ public class App extends Application implements TimerEventListener {
         addTaskBtn.setStyle("-fx-cursor: hand;");
         addTaskBtn.setOnMouseClicked(e -> showCreateTaskDialog());
 
-        // Task management button (changed from stats to use integrated system)
+        // Task management button
         ImageView taskMgmtIcon = new ImageView(new Image(
                 getClass().getResource("/UI/StatsIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
         StackPane taskMgmtBtn = new StackPane(taskMgmtIcon);
         taskMgmtBtn.setStyle("-fx-cursor: hand;");
         taskMgmtBtn.setOnMouseClicked(e -> openStatisticsAndManagement());
+
+        // NEW: Wallpaper selection button
+        ImageView wallpaperIcon = new ImageView(new Image(
+                getClass().getResource("/UI/BackgroundIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+        StackPane wallpaperBtn = new StackPane(wallpaperIcon);
+        wallpaperBtn.setStyle("-fx-cursor: hand;");
+        wallpaperBtn.setOnMouseClicked(e -> showWallpaperSelection());
+
+        // Add hover effect (optional)
+        wallpaperBtn.setOnMouseEntered(e -> wallpaperIcon.setOpacity(0.7));
+        wallpaperBtn.setOnMouseExited(e -> wallpaperIcon.setOpacity(1.0));
 
         // Calendar icon
         ImageView calendarIcon = new ImageView(new Image(
@@ -201,8 +237,49 @@ public class App extends Application implements TimerEventListener {
         questionBtn.setStyle("-fx-cursor: hand;");
         questionBtn.setOnMouseClicked(e -> toggleInfo());
 
-        sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, calendarBtn, questionBtn);
+        sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, wallpaperBtn, calendarBtn, questionBtn);
         root.getChildren().add(sidebarIcons);
+    }
+
+    // method for wallpaper selection:
+    private void showWallpaperSelection() {
+        Stage currentStage = (Stage) startButton.getScene().getWindow();
+
+        WallpaperSelectionDialog wallpaperDialog = new WallpaperSelectionDialog(
+                currentStage,
+                userPreferences,
+                pixelFont,
+                this::onWallpaperChanged);
+
+        wallpaperDialog.show();
+    }
+
+    // method to handle wallpaper changes:
+    private void onWallpaperChanged(String newWallpaperFilename) {
+        // Get current scene dimensions
+        Scene currentScene = backgroundImageView.getScene();
+        double width = currentScene.getWidth();
+        double height = currentScene.getHeight();
+
+        // Create new background image
+        ImageView newBackground = BackgroundManager.createBackgroundImageView(
+                newWallpaperFilename, width, height);
+
+        // Bind to scene size for responsiveness
+        newBackground.fitWidthProperty().bind(currentScene.widthProperty());
+        newBackground.fitHeightProperty().bind(currentScene.heightProperty());
+
+        // Replace the background in the scene
+        AnchorPane root = (AnchorPane) currentScene.getRoot();
+        root.getChildren().remove(backgroundImageView);
+        root.getChildren().add(0, newBackground); // Add at index 0 to keep it behind other elements
+
+        // Update reference
+        backgroundImageView = newBackground;
+
+        // Position the new background
+        AnchorPane.setTopAnchor(backgroundImageView, 0.0);
+        AnchorPane.setLeftAnchor(backgroundImageView, 0.0);
     }
 
     private void createTimerArea(AnchorPane root) {
@@ -335,7 +412,7 @@ public class App extends Application implements TimerEventListener {
 
     private void createInfoPane(AnchorPane root) {
         infoPane = new AnchorPane();
-        Rectangle infoBg = new Rectangle(400, 300);
+        Rectangle infoBg = new Rectangle(400, 350); // Made taller for more content
         infoBg.setFill(Color.WHITE);
         infoBg.setStroke(Color.BLACK);
 
@@ -350,7 +427,9 @@ public class App extends Application implements TimerEventListener {
                 "• Earn XP and unlock achievements\n" +
                 "• Track your productivity with detailed analytics\n" +
                 "• Use the task management screen to organize work\n" +
-                "• Click 'Start Working' to select a task and begin");
+                "• Click 'Start Working' to select a task and begin\n" +
+                "• 🎨 Click the wallpaper icon to change backgrounds\n" +
+                "• Press F11 for fullscreen mode");
         infoText.setWrapText(true);
         infoText.setEditable(false);
 
@@ -376,12 +455,39 @@ public class App extends Application implements TimerEventListener {
         // UI setup is now handled in createMainLayout()
     }
 
+    // ADD keyboard shortcut handling (optional enhancement):
+    private void setupKeyboardShortcuts(Scene scene) {
+        scene.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case F11:
+                    toggleFullscreen();
+                    break;
+                case B:
+                    if (e.isControlDown()) {
+                        showWallpaperSelection();
+                    }
+                    break;
+                case M:
+                    if (e.isControlDown()) {
+                        toggleSound();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        });
+    }
+
     private void setupBackgroundMusic() {
         try {
             Media sound = new Media(getClass().getResource("/UI/background_music.wav").toString());
             backgroundMusic = new MediaPlayer(sound);
             backgroundMusic.setCycleCount(MediaPlayer.INDEFINITE);
-            backgroundMusic.play();
+
+            // Only play if music is enabled in preferences
+            if (userPreferences.isMusicEnabled()) {
+                backgroundMusic.play();
+            }
         } catch (Exception e) {
             System.out.println("Could not load background music: " + e.getMessage());
         }
@@ -595,11 +701,13 @@ public class App extends Application implements TimerEventListener {
                 backgroundMusic.play();
             }
             soundIcon.setOpacity(1.0);
+            userPreferences.setMusicEnabled(true);
         } else {
             if (backgroundMusic != null) {
                 backgroundMusic.pause();
             }
             soundIcon.setOpacity(0.5);
+            userPreferences.setMusicEnabled(false);
         }
         isMuted = !isMuted;
     }
@@ -612,6 +720,23 @@ public class App extends Application implements TimerEventListener {
     private void toggleInfo() {
         infoPane.setVisible(!isInfoOpen);
         isInfoOpen = !isInfoOpen;
+    }
+
+    private void toggleFullscreen() {
+        Stage stage = (Stage) startButton.getScene().getWindow();
+        boolean isCurrentlyFullscreen = stage.isFullScreen();
+
+        stage.setFullScreen(!isCurrentlyFullscreen);
+        userPreferences.setFullscreenEnabled(!isCurrentlyFullscreen);
+
+        // Update background size when switching modes
+        if (!isCurrentlyFullscreen) {
+            // Going to fullscreen - background will auto-resize due to bindings
+            backgroundImageView.setPreserveRatio(false);
+        } else {
+            // Going to windowed - might want to preserve ratio
+            backgroundImageView.setPreserveRatio(false);
+        }
     }
 
     private void updateTimerDisplay(int seconds) {
