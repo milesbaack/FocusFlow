@@ -25,6 +25,9 @@ import com.focusflow.core.timer.TimerType;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.DoubleBinding;
+import javafx.beans.binding.NumberBinding;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -150,16 +153,13 @@ public class App extends Application implements TimerEventListener {
     }
 
     private AnchorPane createMainLayout() {
-
-        // Load and set background
         AnchorPane root = new AnchorPane();
 
-        // Load background using BackgroundManager
+        // Load and set background
         String selectedWallpaper = userPreferences.getSelectedWallpaper();
         backgroundImageView = BackgroundManager.createBackgroundImageView(
                 selectedWallpaper, 1070, 610);
 
-        // Make background responsive to window size changes
         backgroundImageView.fitWidthProperty().bind(root.widthProperty());
         backgroundImageView.fitHeightProperty().bind(root.heightProperty());
 
@@ -167,78 +167,117 @@ public class App extends Application implements TimerEventListener {
         AnchorPane.setLeftAnchor(backgroundImageView, 0.0);
         root.getChildren().add(backgroundImageView);
 
-        // Create sidebar
-        createSidebar(root);
+        // Sidebar (anchor to left)
+        VBox sidebarContainer = createResponsiveSidebar();
+        sidebarContainer.prefWidthProperty().bind(root.widthProperty().multiply(0.12)); // narrower sidebar
+        sidebarContainer.prefHeightProperty().bind(root.heightProperty());
+        AnchorPane.setTopAnchor(sidebarContainer, 0.0);
+        AnchorPane.setLeftAnchor(sidebarContainer, 0.0);
+        AnchorPane.setBottomAnchor(sidebarContainer, 0.0);
+        root.getChildren().add(sidebarContainer);
 
-        // Create main timer area
-        createTimerArea(root);
+        // Timer area (centered and fills most of the screen)
+        StackPane timerContainer = createResponsiveTimerArea();
+        timerContainer.prefWidthProperty().bind(root.widthProperty().multiply(0.85));
+        timerContainer.prefHeightProperty().bind(root.heightProperty().multiply(0.85));
+        timerContainer.minWidthProperty().set(300);
+        timerContainer.minHeightProperty().set(200);
 
-        // Create control buttons
-        createControlButtons(root);
+        // Center the timer using translate properties
+        timerContainer.translateXProperty().bind(
+                root.widthProperty().subtract(timerContainer.widthProperty()).divide(2));
+        timerContainer.translateYProperty().bind(
+                root.heightProperty().subtract(timerContainer.heightProperty()).divide(2));
+        root.getChildren().add(timerContainer);
 
-        // Create progress area
+        // Add other UI elements
         createProgressArea(root);
-
-        // Create top controls
         createTopControls(root);
-
-        // Create overlays
         createOverlays(root);
 
         return root;
     }
 
-    private void createSidebar(AnchorPane root) {
-        VBox sidebarIcons = new VBox(20);
-        sidebarIcons.setPadding(new Insets(0, 0, 0, 45));
-        sidebarIcons.setAlignment(Pos.CENTER);
-        sidebarIcons.setSpacing(25); // Reduced spacing to fit new button
-        AnchorPane.setLeftAnchor(sidebarIcons, 0.0);
-        AnchorPane.setTopAnchor(sidebarIcons, 0.0);
-        AnchorPane.setBottomAnchor(sidebarIcons, 0.0);
+    private VBox createResponsiveSidebar() {
+        VBox sidebarContainer = new VBox();
+        sidebarContainer.setAlignment(Pos.CENTER);
+        sidebarContainer.setStyle("-fx-background-color: transparent;");
+        sidebarContainer.setMinHeight(0);
 
-        final int ICON_SIZE = 55; // Slightly smaller to fit more buttons
+        VBox sidebarIcons = new VBox();
+        sidebarIcons.setAlignment(Pos.CENTER);
+        sidebarIcons.setSpacing(25);
+        sidebarIcons.setMinHeight(0);
+
+        // Bind icon size to container height for responsiveness
+        DoubleBinding iconSizeBinding = sidebarContainer.heightProperty().multiply(0.08).add(10);
 
         // Add task button
         ImageView addTaskIcon = new ImageView(new Image(
-                getClass().getResource("/UI/AddTask.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+                getClass().getResource("/UI/AddTask.png").toString()));
+        addTaskIcon.fitWidthProperty().bind(iconSizeBinding);
+        addTaskIcon.fitHeightProperty().bind(iconSizeBinding);
+        addTaskIcon.setPreserveRatio(true);
+        addTaskIcon.setSmooth(true);
+
         StackPane addTaskBtn = new StackPane(addTaskIcon);
         addTaskBtn.setStyle("-fx-cursor: hand;");
         addTaskBtn.setOnMouseClicked(e -> showCreateTaskDialog());
 
         // Task management button
         ImageView taskMgmtIcon = new ImageView(new Image(
-                getClass().getResource("/UI/StatsIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+                getClass().getResource("/UI/StatsIcon.png").toString()));
+        taskMgmtIcon.fitWidthProperty().bind(iconSizeBinding);
+        taskMgmtIcon.fitHeightProperty().bind(iconSizeBinding);
+        taskMgmtIcon.setPreserveRatio(true);
+        taskMgmtIcon.setSmooth(true);
+
         StackPane taskMgmtBtn = new StackPane(taskMgmtIcon);
         taskMgmtBtn.setStyle("-fx-cursor: hand;");
         taskMgmtBtn.setOnMouseClicked(e -> openStatisticsAndManagement());
 
-        // NEW: Wallpaper selection button
+        // Wallpaper selection button
         ImageView wallpaperIcon = new ImageView(new Image(
-                getClass().getResource("/UI/BackgroundIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+                getClass().getResource("/UI/BackgroundIcon.png").toString()));
+        wallpaperIcon.fitWidthProperty().bind(iconSizeBinding);
+        wallpaperIcon.fitHeightProperty().bind(iconSizeBinding);
+        wallpaperIcon.setPreserveRatio(true);
+        wallpaperIcon.setSmooth(true);
+
         StackPane wallpaperBtn = new StackPane(wallpaperIcon);
         wallpaperBtn.setStyle("-fx-cursor: hand;");
         wallpaperBtn.setOnMouseClicked(e -> showWallpaperSelection());
 
-        // Add hover effect (optional)
-        wallpaperBtn.setOnMouseEntered(e -> wallpaperIcon.setOpacity(0.7));
-        wallpaperBtn.setOnMouseExited(e -> wallpaperIcon.setOpacity(1.0));
-
         // Calendar icon
         ImageView calendarIcon = new ImageView(new Image(
-                getClass().getResource("/UI/CalendarIcon.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+                getClass().getResource("/UI/CalendarIcon.png").toString()));
+        calendarIcon.fitWidthProperty().bind(iconSizeBinding);
+        calendarIcon.fitHeightProperty().bind(iconSizeBinding);
+        calendarIcon.setPreserveRatio(true);
+        calendarIcon.setSmooth(true);
+
         StackPane calendarBtn = new StackPane(calendarIcon);
         calendarBtn.setStyle("-fx-cursor: hand;");
 
         // Question icon
         ImageView questionIcon = new ImageView(new Image(
-                getClass().getResource("/UI/question.png").toString(), ICON_SIZE, ICON_SIZE, true, true));
+                getClass().getResource("/UI/question.png").toString()));
+        questionIcon.fitWidthProperty().bind(iconSizeBinding);
+        questionIcon.fitHeightProperty().bind(iconSizeBinding);
+        questionIcon.setPreserveRatio(true);
+        questionIcon.setSmooth(true);
+
         StackPane questionBtn = new StackPane(questionIcon);
         questionBtn.setStyle("-fx-cursor: hand;");
         questionBtn.setOnMouseClicked(e -> toggleInfo());
 
+        // Bind spacing to container size
+        sidebarIcons.spacingProperty().bind(sidebarContainer.heightProperty().multiply(0.04));
+
         sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, wallpaperBtn, calendarBtn, questionBtn);
-        root.getChildren().add(sidebarIcons);
+        sidebarContainer.getChildren().add(sidebarIcons);
+
+        return sidebarContainer;
     }
 
     // method for wallpaper selection:
@@ -282,53 +321,118 @@ public class App extends Application implements TimerEventListener {
         AnchorPane.setLeftAnchor(backgroundImageView, 0.0);
     }
 
-    private void createTimerArea(AnchorPane root) {
-        // Timer display
-        timerLabel = new Label("25:00");
-        timerLabel.setFont(Font.font(pixelFont.getFamily(), 80));
-        timerLabel.setTextFill(Color.BLACK);
-        AnchorPane.setTopAnchor(timerLabel, 170.0);
-        AnchorPane.setRightAnchor(timerLabel, 170.0);
+    private void setupResponsiveTimerBindings(StackPane container, VBox timerGroup, HBox buttonGroup) {
+        // Calculate base font sizes based on container dimensions
+        NumberBinding containerMinDimension = Bindings.min(
+                container.widthProperty(),
+                container.heightProperty());
 
-        // Timer type label
-        timerTypeLabel = new Label("WORK SESSION");
-        timerTypeLabel.setFont(Font.font(pixelFont.getFamily(), 24));
-        timerTypeLabel.setTextFill(Color.BLACK);
-        AnchorPane.setTopAnchor(timerTypeLabel, 140.0);
-        AnchorPane.setRightAnchor(timerTypeLabel, 170.0);
+        // Font size bindings with no max size, only a minimum
+        DoubleBinding timerFontSize = Bindings.createDoubleBinding(
+                () -> Math.max(containerMinDimension.doubleValue() * 0.15, 40),
+                containerMinDimension);
 
-        // "REMAINING..." text under timer
-        Label remainingLabel = new Label("REMAINING...");
-        remainingLabel.setFont(Font.font(pixelFont.getFamily(), 24));
-        remainingLabel.setTextFill(Color.BLACK);
-        AnchorPane.setTopAnchor(remainingLabel, 240.0);
-        AnchorPane.setRightAnchor(remainingLabel, 170.0);
+        DoubleBinding typeFontSize = Bindings.createDoubleBinding(
+                () -> Math.max(containerMinDimension.doubleValue() * 0.06, 16),
+                containerMinDimension);
 
-        root.getChildren().addAll(timerLabel, timerTypeLabel, remainingLabel);
+        DoubleBinding remainingFontSize = Bindings.createDoubleBinding(
+                () -> Math.max(containerMinDimension.doubleValue() * 0.05, 14),
+                containerMinDimension);
+
+        DoubleBinding buttonFontSize = Bindings.createDoubleBinding(
+                () -> Math.max(containerMinDimension.doubleValue() * 0.04, 12),
+                containerMinDimension);
+
+        // Apply font bindings
+        timerLabel.styleProperty().bind(Bindings.concat(
+                "-fx-font-family: '", pixelFont.getFamily(), "'; -fx-font-size: ",
+                timerFontSize.asString("%.0f"), "px;"));
+
+        timerTypeLabel.styleProperty().bind(Bindings.concat(
+                "-fx-font-family: '", pixelFont.getFamily(), "'; -fx-font-size: ",
+                typeFontSize.asString("%.0f"), "px;"));
+
+        Label remainingLabel = (Label) timerGroup.getChildren().get(2);
+        remainingLabel.styleProperty().bind(Bindings.concat(
+                "-fx-font-family: '", pixelFont.getFamily(), "'; -fx-font-size: ",
+                remainingFontSize.asString("%.0f"), "px;"));
+
+        // Button styling and sizing
+        DoubleBinding buttonWidth = Bindings.createDoubleBinding(
+                () -> containerMinDimension.doubleValue() * 0.2,
+                containerMinDimension);
+
+        DoubleBinding buttonHeight = Bindings.createDoubleBinding(
+                () -> containerMinDimension.doubleValue() * 0.08,
+                containerMinDimension);
+
+        DoubleBinding buttonSpacing = Bindings.createDoubleBinding(
+                () -> containerMinDimension.doubleValue() * 0.03,
+                containerMinDimension);
+
+        startWorkingButton.prefWidthProperty().bind(buttonWidth);
+        startWorkingButton.prefHeightProperty().bind(buttonHeight);
+        startWorkingButton.styleProperty().bind(Bindings.concat(
+                "-fx-background-color:rgb(102, 204, 102); -fx-text-fill: white; -fx-background-radius: 15; -fx-font-family: '",
+                pixelFont.getFamily(), "'; -fx-font-size: ", buttonFontSize.asString("%.0f"), "px;"));
+
+        startButton.prefWidthProperty().bind(Bindings.createDoubleBinding(
+                () -> buttonWidth.get() * 0.7, buttonWidth));
+        startButton.prefHeightProperty().bind(buttonHeight);
+        startButton.styleProperty().bind(Bindings.concat(
+                "-fx-background-color:rgb(255, 255, 255); -fx-text-fill: black; -fx-background-radius: 15; -fx-font-family: '",
+                pixelFont.getFamily(), "'; -fx-font-size: ", buttonFontSize.asString("%.0f"), "px;"));
+
+        // Spacing bindings to prevent crowding
+        buttonGroup.spacingProperty().bind(buttonSpacing);
+        timerGroup.spacingProperty().bind(Bindings.createDoubleBinding(
+                () -> containerMinDimension.doubleValue() * 0.04,
+                containerMinDimension));
     }
 
-    private void createControlButtons(AnchorPane root) {
-        // Start working on task button
+    private StackPane createResponsiveTimerArea() {
+        StackPane timerContainer = new StackPane();
+        timerContainer.setAlignment(Pos.CENTER);
+
+        // Create main timer group
+        VBox timerGroup = new VBox();
+        timerGroup.setAlignment(Pos.CENTER);
+
+        // Initialize timer labels
+        timerTypeLabel = new Label("WORK SESSION");
+        timerTypeLabel.setTextFill(Color.BLACK);
+
+        timerLabel = new Label("25:00");
+        timerLabel.setTextFill(Color.BLACK);
+
+        Label remainingLabel = new Label("REMAINING...");
+        remainingLabel.setTextFill(Color.BLACK);
+
+        // Create button group
+        HBox buttonGroup = new HBox();
+        buttonGroup.setAlignment(Pos.CENTER);
+
         startWorkingButton = new Button("Start Working");
-        startWorkingButton.setFont(Font.font(pixelFont.getFamily(), 20));
         startWorkingButton
                 .setStyle("-fx-background-color:rgb(102, 204, 102); -fx-text-fill: white; -fx-background-radius: 15;");
-        startWorkingButton.setPrefSize(120, 35);
-        AnchorPane.setTopAnchor(startWorkingButton, 390.0);
-        AnchorPane.setRightAnchor(startWorkingButton, 220.0);
         startWorkingButton.setOnAction(e -> showTaskSelection());
 
-        // Start/Pause button
         startButton = new Button("START");
-        startButton.setFont(Font.font(pixelFont.getFamily(), 24));
         startButton
                 .setStyle("-fx-background-color:rgb(255, 255, 255); -fx-text-fill: black; -fx-background-radius: 15;");
-        startButton.setPrefSize(80, 35);
-        AnchorPane.setTopAnchor(startButton, 390.0);
-        AnchorPane.setRightAnchor(startButton, 120.0);
         startButton.setOnAction(e -> toggleTimer());
 
-        root.getChildren().addAll(startWorkingButton, startButton);
+        buttonGroup.getChildren().addAll(startWorkingButton, startButton);
+
+        // Add all components to timer group
+        timerGroup.getChildren().addAll(timerTypeLabel, timerLabel, remainingLabel, buttonGroup);
+
+        // Create responsive bindings
+        setupResponsiveTimerBindings(timerContainer, timerGroup, buttonGroup);
+
+        timerContainer.getChildren().add(timerGroup);
+        return timerContainer;
     }
 
     private void createProgressArea(AnchorPane root) {

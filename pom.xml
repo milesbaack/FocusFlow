@@ -145,6 +145,7 @@
         </dependency>
     </dependencies>
 
+
     <!-- 
         Build Configuration: Tells Maven how to compile and package our project
         Plugins extend Maven's capabilities for specific tasks
