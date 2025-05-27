@@ -709,6 +709,35 @@ public class QuestAndStatsGUI {
         return String.format("%dh %dm", hours, minutes);
     }
 
+    // Add this method to QuestAndStatsGUI
+    public TabPane getStatsAndManagementTabs(List<Task> tasks, List<FocusSession> sessions, Stage parentStage) {
+        TabPane tabPane = new TabPane();
+
+        Tab overviewTab = new Tab("Overview");
+        overviewTab.setClosable(false);
+        overviewTab.setContent(createOverviewTab(tasks, sessions));
+
+        Tab productivityTab = new Tab("Productivity");
+        productivityTab.setClosable(false);
+        productivityTab.setContent(createProductivityTab(tasks, sessions));
+
+        Tab questsTab = new Tab("Quests & Achievements");
+        questsTab.setClosable(false);
+        questsTab.setContent(createQuestsTab(tasks));
+
+        Tab timeTab = new Tab("Time Tracking");
+        timeTab.setClosable(false);
+        timeTab.setContent(createTimeTrackingTab(sessions));
+
+        Tab managementTab = new Tab("Task Management");
+        managementTab.setClosable(false);
+        managementTab.setContent(createManagementTab(tasks, parentStage));
+
+        tabPane.getTabs().addAll(overviewTab, productivityTab, questsTab, timeTab, managementTab);
+
+        return tabPane;
+    }
+
     // Getters for integration with App class
     public QuestManager getQuestManager() {
         return questManager;

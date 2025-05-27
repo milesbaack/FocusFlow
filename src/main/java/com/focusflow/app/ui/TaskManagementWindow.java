@@ -48,6 +48,7 @@ public class TaskManagementWindow {
     private QuestManager questManager;
     private Font pixelFont;
     private Runnable onTasksUpdated;
+    private BorderPane root;
 
     // UI Components
     private ListView<TaskItem> taskListView;
@@ -76,7 +77,7 @@ public class TaskManagementWindow {
         stage.setHeight(600);
 
         // Create main layout
-        BorderPane root = new BorderPane();
+        root = new BorderPane();
 
         // Create tabbed interface
         TabPane tabPane = new TabPane();
@@ -784,5 +785,9 @@ public class TaskManagementWindow {
                     quest.getProgressPercentage(),
                     quest.calculateXpReward());
         }
+    }
+
+    public javafx.scene.Parent getRoot() {
+        return root;
     }
 }

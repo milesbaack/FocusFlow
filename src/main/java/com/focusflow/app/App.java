@@ -97,6 +97,19 @@ public class App extends Application implements TimerEventListener {
     private Font pixelFont;
     private Label questProgressLabel;
 
+    // Navigation
+    private enum ScreenType {
+        TIMER,
+        TASK_MANAGEMENT,
+        STATS
+    }
+
+    private StackPane mainContentPane;
+    private VBox timerPanel;
+    private VBox taskManagementPanel;
+    private VBox statsPanel;
+    private ScreenType currentScreen = ScreenType.TIMER;
+
     @Override
     public void start(Stage stage) {
         userPreferences = new UserPreferences();
@@ -110,7 +123,6 @@ public class App extends Application implements TimerEventListener {
         stage.setScene(scene);
         stage.setTitle("FocusFlow");
 
-        // Apply fullscreen setting from preferences
         if (userPreferences.isFullscreenEnabled()) {
             stage.setFullScreen(true);
             stage.setResizable(true);
@@ -142,12 +154,10 @@ public class App extends Application implements TimerEventListener {
         xpManager = new XpManager();
         questManager = new QuestManager(achievementManager, xpManager);
 
-        // Initialize the integrated QuestAndStatsGUI
         questStatsGUI = new QuestAndStatsGUI(questManager, achievementManager, xpManager, pixelFont);
 
-        // Initialize timers
-        workTimer = new PomodoroTimer(TimerType.WORK, 25 * 60); // 25 minutes
-        breakTimer = new PomodoroTimer(TimerType.SHORT_BREAK, 5 * 60); // 5 minutes
+        workTimer = new PomodoroTimer(TimerType.WORK, 25 * 60);
+        breakTimer = new PomodoroTimer(TimerType.SHORT_BREAK, 5 * 60);
         workTimer.addListener(this);
         breakTimer.addListener(this);
     }
@@ -169,28 +179,41 @@ public class App extends Application implements TimerEventListener {
 
         // Sidebar (anchor to left)
         VBox sidebarContainer = createResponsiveSidebar();
-        sidebarContainer.prefWidthProperty().bind(root.widthProperty().multiply(0.12)); // narrower sidebar
+        sidebarContainer.prefWidthProperty().bind(root.widthProperty().multiply(0.12));
         sidebarContainer.prefHeightProperty().bind(root.heightProperty());
         AnchorPane.setTopAnchor(sidebarContainer, 0.0);
         AnchorPane.setLeftAnchor(sidebarContainer, 0.0);
         AnchorPane.setBottomAnchor(sidebarContainer, 0.0);
         root.getChildren().add(sidebarContainer);
 
-        // Timer area (centered and fills most of the screen)
-        StackPane timerContainer = createResponsiveTimerArea();
-        timerContainer.prefWidthProperty().bind(root.widthProperty().multiply(0.85));
-        timerContainer.prefHeightProperty().bind(root.heightProperty().multiply(0.85));
-        timerContainer.minWidthProperty().set(300);
-        timerContainer.minHeightProperty().set(200);
+        // Main content area (StackPane)
+        mainContentPane = new StackPane();
+        mainContentPane.prefWidthProperty().bind(root.widthProperty().multiply(0.85));
+        mainContentPane.prefHeightProperty().bind(root.heightProperty().multiply(0.85));
+        mainContentPane.minWidthProperty().set(300);
+        mainContentPane.minHeightProperty().set(200);
 
-        // Center the timer using translate properties
-        timerContainer.translateXProperty().bind(
-                root.widthProperty().subtract(timerContainer.widthProperty()).divide(2));
-        timerContainer.translateYProperty().bind(
-                root.heightProperty().subtract(timerContainer.heightProperty()).divide(2));
-        root.getChildren().add(timerContainer);
+        mainContentPane.translateXProperty().bind(
+                root.widthProperty().subtract(mainContentPane.widthProperty()).divide(2));
+        mainContentPane.translateYProperty().bind(
+                root.heightProperty().subtract(mainContentPane.heightProperty()).divide(2));
 
-        // Add other UI elements
+        // Create and add panels
+        timerPanel = new VBox(createResponsiveTimerArea());
+        timerPanel.setAlignment(Pos.CENTER);
+
+        taskManagementPanel = createTaskManagementPanel();
+        taskManagementPanel.setAlignment(Pos.CENTER);
+
+        statsPanel = createStatsPanel();
+        statsPanel.setAlignment(Pos.CENTER);
+
+        mainContentPane.getChildren().addAll(timerPanel, taskManagementPanel, statsPanel);
+
+        showScreen(ScreenType.TIMER);
+
+        root.getChildren().add(mainContentPane);
+
         createProgressArea(root);
         createTopControls(root);
         createOverlays(root);
@@ -209,7 +232,6 @@ public class App extends Application implements TimerEventListener {
         sidebarIcons.setSpacing(25);
         sidebarIcons.setMinHeight(0);
 
-        // Bind icon size to container height for responsiveness
         DoubleBinding iconSizeBinding = sidebarContainer.heightProperty().multiply(0.08).add(10);
 
         // Add task button
@@ -234,7 +256,19 @@ public class App extends Application implements TimerEventListener {
 
         StackPane taskMgmtBtn = new StackPane(taskMgmtIcon);
         taskMgmtBtn.setStyle("-fx-cursor: hand;");
-        taskMgmtBtn.setOnMouseClicked(e -> openStatisticsAndManagement());
+        taskMgmtBtn.setOnMouseClicked(e -> showScreen(ScreenType.TASK_MANAGEMENT));
+
+        // Stats button
+        ImageView statsIcon = new ImageView(new Image(
+                getClass().getResource("/UI/StatsIcon.png").toString()));
+        statsIcon.fitWidthProperty().bind(iconSizeBinding);
+        statsIcon.fitHeightProperty().bind(iconSizeBinding);
+        statsIcon.setPreserveRatio(true);
+        statsIcon.setSmooth(true);
+
+        StackPane statsBtn = new StackPane(statsIcon);
+        statsBtn.setStyle("-fx-cursor: hand;");
+        statsBtn.setOnMouseClicked(e -> showScreen(ScreenType.STATS));
 
         // Wallpaper selection button
         ImageView wallpaperIcon = new ImageView(new Image(
@@ -271,13 +305,68 @@ public class App extends Application implements TimerEventListener {
         questionBtn.setStyle("-fx-cursor: hand;");
         questionBtn.setOnMouseClicked(e -> toggleInfo());
 
-        // Bind spacing to container size
         sidebarIcons.spacingProperty().bind(sidebarContainer.heightProperty().multiply(0.04));
 
-        sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, wallpaperBtn, calendarBtn, questionBtn);
+        sidebarIcons.getChildren().addAll(addTaskBtn, taskMgmtBtn, statsBtn, wallpaperBtn, calendarBtn, questionBtn);
         sidebarContainer.getChildren().add(sidebarIcons);
 
         return sidebarContainer;
+    }
+
+    private VBox createTaskManagementPanel() {
+        VBox panel = new VBox(10);
+        panel.setPadding(new Insets(20));
+        panel.setAlignment(Pos.TOP_CENTER);
+
+        Label title = new Label("Task Management");
+        title.setFont(Font.font(pixelFont.getFamily(), 22));
+
+        TaskManagementWindow taskMgmt = new TaskManagementWindow(tasks, questManager, pixelFont);
+        taskMgmt.setOnTasksUpdated(this::updateQuestProgress);
+
+        Button homeBtn = new Button("Home");
+        homeBtn.setOnAction(e -> showScreen(ScreenType.TIMER));
+
+        panel.getChildren().addAll(title, taskMgmt.getRoot(), homeBtn);
+        panel.setVisible(false);
+        return panel;
+    }
+
+    private VBox createStatsPanel() {
+        VBox panel = new VBox(10);
+        panel.setPadding(new Insets(20));
+        panel.setAlignment(Pos.TOP_CENTER);
+
+        Label title = new Label("Statistics & Management");
+        title.setFont(Font.font(pixelFont.getFamily(), 22));
+
+        // Embed the QuestAndStatsGUI tabs directly
+        // Defensive: check startButton is initialized before using its scene
+        Stage parentStage = null;
+        if (startButton != null && startButton.getScene() != null) {
+            parentStage = (Stage) startButton.getScene().getWindow();
+        }
+
+        // If parentStage is null, just pass null (shouldn't break, but disables some
+        // features)
+        javafx.scene.control.TabPane statsTabs = questStatsGUI.getStatsAndManagementTabs(
+                tasks,
+                sessionManager.getSessionHistory(),
+                parentStage);
+
+        Button homeBtn = new Button("Home");
+        homeBtn.setOnAction(e -> showScreen(ScreenType.TIMER));
+
+        panel.getChildren().addAll(title, statsTabs, homeBtn);
+        panel.setVisible(false);
+        return panel;
+    }
+
+    private void showScreen(ScreenType screen) {
+        timerPanel.setVisible(screen == ScreenType.TIMER);
+        taskManagementPanel.setVisible(screen == ScreenType.TASK_MANAGEMENT);
+        statsPanel.setVisible(screen == ScreenType.STATS);
+        currentScreen = screen;
     }
 
     // method for wallpaper selection:
@@ -757,18 +846,6 @@ public class App extends Application implements TimerEventListener {
         Scene scene = new Scene(layout, 400, 200);
         dialog.setScene(scene);
         dialog.showAndWait();
-    }
-
-    private void openTaskManagement() {
-        TaskManagementWindow taskMgmt = new TaskManagementWindow(tasks, questManager, pixelFont);
-        taskMgmt.setOnTasksUpdated(() -> updateQuestProgress());
-        taskMgmt.show();
-    }
-
-    private void openStatisticsAndManagement() {
-        // Use the integrated QuestAndStatsGUI which includes both stats and management
-        Stage currentStage = (Stage) startButton.getScene().getWindow();
-        questStatsGUI.showStatisticsWindow(currentStage, tasks, sessionManager.getSessionHistory());
     }
 
     private void toggleTimer() {
