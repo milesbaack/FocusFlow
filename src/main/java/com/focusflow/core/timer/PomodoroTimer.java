@@ -1,11 +1,10 @@
 /**
  * Pomodoro Timer class to handle countdown logic, start/pause/reset, and 
  * notification logging.
- * @author Emilio Lopez
- * @version 1.0.1
+ * @author Emilio Lopez & Miles Baack
+ * @version 1.0.2 - Fixed timer logic and synchronization
  */
 
-// TODO: Refactor internal timer reset
 package com.focusflow.core.timer;
 
 import java.util.ArrayList;
@@ -25,7 +24,7 @@ import com.focusflow.core.session.SessionManager;
  * notification system and full state management.
  * 
  * @author Miles Baack
- * @version 1.0
+ * @version 1.0.2
  * @see com.focusflow.core.timer.Timer
  * @see com.focusflow.core.timer.TimerEventListener
  */
@@ -34,7 +33,7 @@ public class PomodoroTimer implements Timer {
     private final TimerType type;
     private final int duration;
     private final AtomicInteger remainingSeconds;
-    private TimerState state = TimerState.INACTIVE;
+    private volatile TimerState state = TimerState.INACTIVE;
     private java.util.Timer internalTimer;
     private long startTime;
     private long pauseTime;
@@ -74,7 +73,7 @@ public class PomodoroTimer implements Timer {
     }
 
     @Override
-    public void start() {
+    public synchronized void start() {
         if (state == TimerState.RUNNING) {
             return;
         }
@@ -84,44 +83,70 @@ public class PomodoroTimer implements Timer {
             return;
         }
 
+        // Only start session for work timers with valid task ID
+        if (type == TimerType.WORK && currentTaskId != null && !currentTaskId.trim().isEmpty()) {
+            try {
+                sessionManager.startSession(currentTaskId);
+            } catch (Exception e) {
+                System.err.println("Error starting session: " + e.getMessage());
+            }
+        }
+
         state = TimerState.RUNNING;
         startTime = System.currentTimeMillis();
-        internalTimer = new java.util.Timer();
-
-        // Start new session
-        sessionManager.startSession(currentTaskId);
+        internalTimer = new java.util.Timer("PomodoroTimer-" + type.name(), true);
 
         internalTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                int remaining = remainingSeconds.decrementAndGet();
-                notifyTick(remaining);
-
+                int remaining = remainingSeconds.get();
+                
+                if (remaining <= 0) {
+                    // Timer completed
+                    complete();
+                    return;
+                }
+                
+                // Decrement and notify
+                remaining = remainingSeconds.decrementAndGet();
+                notifyTick(Math.max(0, remaining));
+                
+                // Check again after decrement
                 if (remaining <= 0) {
                     complete();
                 }
             }
-        }, 0, 1000);
+        }, 1000, 1000); // Start after 1 second, repeat every 1 second
 
         notifyStarted();
     }
 
     @Override
-    public void pause() {
+    public synchronized void pause() {
         if (state != TimerState.RUNNING) {
             return;
         }
 
         state = TimerState.PAUSED;
         pauseTime = System.currentTimeMillis();
-        internalTimer.cancel();
-        internalTimer = null;
+        
+        if (internalTimer != null) {
+            internalTimer.cancel();
+            internalTimer = null;
+        }
+
+        // Pause session if it exists
+        try {
+            sessionManager.pauseCurrentSession();
+        } catch (Exception e) {
+            // Session might not exist, ignore
+        }
 
         notifyPaused();
     }
 
     @Override
-    public void resume() {
+    public synchronized void resume() {
         if (state != TimerState.PAUSED) {
             return;
         }
@@ -130,24 +155,38 @@ public class PomodoroTimer implements Timer {
         long pauseDuration = System.currentTimeMillis() - pauseTime;
         startTime += pauseDuration;
 
-        internalTimer = new java.util.Timer();
+        internalTimer = new java.util.Timer("PomodoroTimer-" + type.name(), true);
         internalTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                int remaining = remainingSeconds.decrementAndGet();
-                notifyTick(remaining);
-
+                int remaining = remainingSeconds.get();
+                
+                if (remaining <= 0) {
+                    complete();
+                    return;
+                }
+                
+                remaining = remainingSeconds.decrementAndGet();
+                notifyTick(Math.max(0, remaining));
+                
                 if (remaining <= 0) {
                     complete();
                 }
             }
-        }, 0, 1000);
+        }, 1000, 1000);
+
+        // Resume session if it exists
+        try {
+            sessionManager.resumeCurrentSession();
+        } catch (Exception e) {
+            // Session might not exist, ignore
+        }
 
         notifyResumed();
     }
 
     @Override
-    public void stop() {
+    public synchronized void stop() {
         if (state == TimerState.INACTIVE || state == TimerState.STOPPED) {
             return;
         }
@@ -158,18 +197,24 @@ public class PomodoroTimer implements Timer {
             internalTimer = null;
         }
 
-        // End current session
-        sessionManager.endCurrentSession();
+        // End current session if it exists
+        try {
+            sessionManager.endCurrentSession();
+        } catch (Exception e) {
+            // Session might not exist, ignore
+        }
 
         notifyStopped();
     }
 
     @Override
-    public void reset() {
+    public synchronized void reset() {
         stop();
         state = TimerState.INACTIVE;
         remainingSeconds.set(duration);
         elapsedTime = 0;
+        startTime = 0;
+        pauseTime = 0;
 
         notifyReset();
     }
@@ -184,12 +229,16 @@ public class PomodoroTimer implements Timer {
             return pauseTime - startTime;
         }
 
-        return System.currentTimeMillis() - startTime;
+        if (state == TimerState.RUNNING) {
+            return System.currentTimeMillis() - startTime;
+        }
+
+        return elapsedTime;
     }
 
     @Override
     public int getRemainingTime() {
-        return remainingSeconds.get();
+        return Math.max(0, remainingSeconds.get());
     }
 
     @Override
@@ -204,67 +253,124 @@ public class PomodoroTimer implements Timer {
 
     @Override
     public void addListener(TimerEventListener listener) {
-        listeners.add(listener);
+        if (listener != null) {
+            synchronized (listeners) {
+                listeners.add(listener);
+            }
+        }
     }
 
     @Override
     public void removeListener(TimerEventListener listener) {
-        listeners.remove(listener);
+        synchronized (listeners) {
+            listeners.remove(listener);
+        }
     }
 
-    private void complete() {
+    private synchronized void complete() {
+        if (state != TimerState.RUNNING) {
+            return; // Already completed or stopped
+        }
+        
         state = TimerState.COMPLETED;
         if (internalTimer != null) {
             internalTimer.cancel();
             internalTimer = null;
         }
-        elapsedTime = duration * 1000;
+        elapsedTime = duration * 1000L;
+        remainingSeconds.set(0);
 
-        // End current session
-        sessionManager.endCurrentSession();
+        // End current session if it exists
+        try {
+            sessionManager.endCurrentSession();
+        } catch (Exception e) {
+            // Session might not exist, ignore
+        }
 
         notifyCompleted();
     }
 
     private void notifyStarted() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerStarted(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerStarted(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer started: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyPaused() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerPaused(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerPaused(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer paused: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyResumed() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerResumed(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerResumed(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer resumed: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyCompleted() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerCompleted(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerCompleted(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer completed: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyStopped() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerStopped(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerStopped(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer stopped: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyTick(int remainingSeconds) {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerTick(this, remainingSeconds);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerTick(this, remainingSeconds);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer tick: " + e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyReset() {
-        for (TimerEventListener listener : listeners) {
-            listener.onTimerReset(this);
+        synchronized (listeners) {
+            for (TimerEventListener listener : listeners) {
+                try {
+                    listener.onTimerReset(this);
+                } catch (Exception e) {
+                    System.err.println("Error notifying timer reset: " + e.getMessage());
+                }
+            }
         }
     }
 }

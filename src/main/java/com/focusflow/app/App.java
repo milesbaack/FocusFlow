@@ -26,6 +26,7 @@ import com.focusflow.core.timer.TimerType;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -33,7 +34,6 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.TextArea;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -53,10 +53,10 @@ import javafx.stage.Stage;
 
 /**
  * The App class serves as the main JavaFX application for the FocusFlow app.
- * Updated to use seamless single-screen navigation with overlay panels.
+ * Enhanced with responsive design and fixed timer functionality.
  *
  * @author Miles Baack, Emilio Lopez, and Brisa Rueda
- * @version 5.0.0 - Seamless UX Update
+ * @version 5.1.0 - Responsive Design & Timer Fixes
  */
 public class App extends Application implements TimerEventListener {
     // Core managers
@@ -75,6 +75,8 @@ public class App extends Application implements TimerEventListener {
     private ImageView backgroundImageView;
     private OverlayManager overlayManager;
     private Font pixelFont;
+    private Scene mainScene;
+    private Stage primaryStage;
 
     // UI Components - Timer Area
     private Label timerLabel;
@@ -82,36 +84,41 @@ public class App extends Application implements TimerEventListener {
     private Label currentTaskLabel;
     private Button startButton;
     private Button startWorkingButton;
+    private VBox timerSection;
 
     // UI Components - Bottom Area
     private ProgressBar progressBar;
     private Label questProgressLabel;
+    private VBox bottomArea;
 
     // UI Components - Sidebar
     private ImageView soundIcon;
     private MediaPlayer backgroundMusic;
     private boolean isMuted = false;
+    private VBox sidebar;
 
     @Override
     public void start(Stage stage) {
+        this.primaryStage = stage;
         userPreferences = new UserPreferences();
 
         loadPixelFont();
         initializeManagers();
         setupBackgroundMusic();
 
-        Scene scene = new Scene(createMainLayout(), 1070, 610);
-        stage.setScene(scene);
+        mainScene = new Scene(createMainLayout(), 1070, 610);
+        stage.setScene(mainScene);
         stage.setTitle("FocusFlow");
 
         if (userPreferences.isFullscreenEnabled()) {
             stage.setFullScreen(true);
             stage.setResizable(true);
         } else {
-            stage.setResizable(false);
+            stage.setResizable(true); // Allow resizing
         }
 
-        setupKeyboardShortcuts(scene);
+        setupKeyboardShortcuts(mainScene);
+        setupResponsiveDesign();
         stage.show();
     }
 
@@ -134,10 +141,15 @@ public class App extends Application implements TimerEventListener {
         xpManager = new XpManager();
         questManager = new QuestManager(achievementManager, xpManager);
 
+        // Initialize timers with proper setup
         workTimer = new PomodoroTimer(TimerType.WORK, 25 * 60);
         breakTimer = new PomodoroTimer(TimerType.SHORT_BREAK, 5 * 60);
+        
+        // Add listeners
         workTimer.addListener(this);
         breakTimer.addListener(this);
+        
+        System.out.println("Timers initialized: Work=" + workTimer.getRemainingTime() + "s, Break=" + breakTimer.getRemainingTime() + "s");
     }
 
     private AnchorPane createMainLayout() {
@@ -150,27 +162,25 @@ public class App extends Application implements TimerEventListener {
         BorderPane unifiedLayout = new BorderPane();
 
         // LEFT: Simplified sidebar
-        VBox sidebar = createSimplifiedSidebar();
-        sidebar.prefWidthProperty().bind(root.widthProperty().multiply(0.08));
+        sidebar = createSimplifiedSidebar();
 
         // CENTER: Main content area with overlay support
         StackPane mainContent = new StackPane();
 
         // Create persistent timer area
-        VBox timerArea = createPersistentTimerArea();
-        StackPane.setAlignment(timerArea, Pos.TOP_CENTER);
+        timerSection = createPersistentTimerArea();
+        StackPane.setAlignment(timerSection, Pos.TOP_CENTER);
 
         // Create overlay container
         StackPane overlayContainer = new StackPane();
 
-        mainContent.getChildren().addAll(timerArea, overlayContainer);
+        mainContent.getChildren().addAll(timerSection, overlayContainer);
 
         // Initialize overlay manager
         this.overlayManager = new OverlayManager(overlayContainer);
 
         // BOTTOM: Action bar and progress
-        VBox bottomArea = createBottomArea();
-        bottomArea.prefHeightProperty().bind(root.heightProperty().multiply(0.15));
+        bottomArea = createBottomArea();
 
         unifiedLayout.setLeft(sidebar);
         unifiedLayout.setCenter(mainContent);
@@ -185,6 +195,67 @@ public class App extends Application implements TimerEventListener {
         return root;
     }
 
+    private void setupResponsiveDesign() {
+        // Setup responsive bindings for main components
+        if (mainScene != null) {
+            // Sidebar responsive width
+            sidebar.prefWidthProperty().bind(
+                Bindings.max(60, // Minimum width
+                    mainScene.widthProperty().multiply(0.08)
+                )
+            );
+
+            // Timer area responsive sizing
+            timerSection.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double basePadding = width < 800 ? 20 : 30;
+                    return new Insets(basePadding);
+                }, mainScene.widthProperty())
+            );
+
+            timerSection.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 12.0 : 15.0;
+                }, mainScene.widthProperty())
+            );
+
+            // Bottom area responsive height
+            bottomArea.prefHeightProperty().bind(
+                Bindings.max(100, // Minimum height
+                    mainScene.heightProperty().multiply(0.15)
+                )
+            );
+
+            // Timer label responsive font size
+            timerLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 36.0 : 48.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, mainScene.widthProperty())
+            );
+
+            // Timer type label responsive font size  
+            timerTypeLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 14.0 : 18.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, mainScene.widthProperty())
+            );
+
+            // Current task label responsive font size
+            currentTaskLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.NORMAL, baseSize);
+                }, mainScene.widthProperty())
+            );
+        }
+    }
+
     private void setupBackground(AnchorPane root) {
         String selectedWallpaper = userPreferences.getSelectedWallpaper();
         backgroundImageView = BackgroundManager.createBackgroundImageView(
@@ -197,25 +268,21 @@ public class App extends Application implements TimerEventListener {
     }
 
     private VBox createPersistentTimerArea() {
-        VBox timerSection = new VBox(15);
+        VBox timerSection = new VBox();
         timerSection.setAlignment(Pos.CENTER);
-        timerSection.setPadding(new Insets(30));
         timerSection.setMaxHeight(Region.USE_PREF_SIZE);
         timerSection.setStyle("-fx-background-color: rgba(255,255,255,0.1); " +
-                "-fx-background-radius: 15; -fx-padding: 30;");
+                "-fx-background-radius: 15;");
 
         // Current task indicator
         currentTaskLabel = new Label("No task selected");
-        currentTaskLabel.setFont(Font.font(pixelFont.getFamily(), 14));
         currentTaskLabel.setTextFill(Color.DARKSLATEGRAY);
 
         // Timer display
         timerTypeLabel = new Label("WORK SESSION");
-        timerTypeLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 18));
         timerTypeLabel.setTextFill(Color.BLACK);
 
         timerLabel = new Label("25:00");
-        timerLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 48));
         timerLabel.setTextFill(Color.BLACK);
 
         Label remainingLabel = new Label("REMAINING...");
@@ -223,8 +290,18 @@ public class App extends Application implements TimerEventListener {
         remainingLabel.setTextFill(Color.DARKSLATEGRAY);
 
         // Control buttons
-        HBox controls = new HBox(15);
+        HBox controls = new HBox();
         controls.setAlignment(Pos.CENTER);
+        
+        // Set initial spacing and update based on scene width
+        controls.setSpacing(15);
+        if (mainScene != null) {
+            controls.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 10.0 : 15.0;
+                }, mainScene.widthProperty())
+            );
+        }
 
         startWorkingButton = new Button("Select Task");
         startWorkingButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; " +
@@ -241,23 +318,49 @@ public class App extends Application implements TimerEventListener {
         timerSection.getChildren().addAll(
                 currentTaskLabel, timerTypeLabel, timerLabel, remainingLabel, controls);
 
+        // Initial timer display
+        updateTimerDisplay(workTimer.getRemainingTime());
+
         return timerSection;
     }
 
     private VBox createBottomArea() {
-        VBox bottomArea = new VBox(10);
-        bottomArea.setPadding(new Insets(15));
+        VBox bottomArea = new VBox();
+        bottomArea.paddingProperty().bind(
+            Bindings.createObjectBinding(() -> {
+                double width = mainScene != null ? mainScene.getWidth() : 1070;
+                double basePadding = width < 800 ? 12 : 15;
+                return new Insets(basePadding);
+            }, mainScene != null ? mainScene.widthProperty() : 
+                javafx.beans.binding.Bindings.createDoubleBinding(() -> 15.0))
+        );
+        bottomArea.spacingProperty().bind(
+            Bindings.createDoubleBinding(() -> {
+                if (mainScene == null) return 10.0;
+                return mainScene.getWidth() < 800 ? 8.0 : 10.0;
+            }, mainScene != null ? mainScene.widthProperty() : 
+                javafx.beans.binding.Bindings.createDoubleBinding(() -> 10.0))
+        );
 
         // Quick action buttons
-        HBox actionButtons = new HBox(15);
+        HBox actionButtons = new HBox();
         actionButtons.setAlignment(Pos.CENTER);
+        actionButtons.setSpacing(15);
+        
+        if (mainScene != null) {
+            actionButtons.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 10.0 : 15.0;
+                }, mainScene.widthProperty())
+            );
+        }
 
         Button addTaskBtn = new Button("+ Add Task");
         Button viewTasksBtn = new Button("📋 Tasks");
         Button questsBtn = new Button("🏆 Create Quest");
         Button statsBtn = new Button("📊 Stats");
 
-        // Style buttons
+        // Style buttons with responsive sizing
         String buttonStyle = "-fx-background-color: rgba(255,255,255,0.8); " +
                 "-fx-background-radius: 10; -fx-padding: 8 15; " +
                 "-fx-font-weight: bold; -fx-cursor: hand;";
@@ -266,6 +369,20 @@ public class App extends Application implements TimerEventListener {
         viewTasksBtn.setStyle(buttonStyle);
         questsBtn.setStyle(buttonStyle);
         statsBtn.setStyle(buttonStyle);
+
+        // Responsive font sizes for buttons
+        if (mainScene != null) {
+            addTaskBtn.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 11.0 : 12.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, mainScene.widthProperty())
+            );
+            viewTasksBtn.fontProperty().bind(addTaskBtn.fontProperty());
+            questsBtn.fontProperty().bind(addTaskBtn.fontProperty());
+            statsBtn.fontProperty().bind(addTaskBtn.fontProperty());
+        }
 
         // Add click handlers
         addTaskBtn.setOnAction(e -> showTaskCreationOverlay());
@@ -276,20 +393,53 @@ public class App extends Application implements TimerEventListener {
         actionButtons.getChildren().addAll(addTaskBtn, viewTasksBtn, questsBtn, statsBtn);
 
         // Progress area
-        HBox progressArea = new HBox(20);
+        HBox progressArea = new HBox();
         progressArea.setAlignment(Pos.CENTER);
+        progressArea.setSpacing(20);
+        
+        if (mainScene != null) {
+            progressArea.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 15.0 : 20.0;
+                }, mainScene.widthProperty())
+            );
+        }
 
         questProgressLabel = new Label("No active quest");
-        questProgressLabel.setFont(Font.font(pixelFont.getFamily(), 14));
         questProgressLabel.setTextFill(Color.BLACK);
+        if (mainScene != null) {
+            questProgressLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.NORMAL, baseSize);
+                }, mainScene.widthProperty())
+            );
+        }
 
         progressBar = new ProgressBar(0.0);
         progressBar.setPrefWidth(300);
         progressBar.setPrefHeight(20);
         progressBar.setStyle("-fx-accent: #FF9800;");
+        
+        if (mainScene != null) {
+            progressBar.prefWidthProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 200.0 : 300.0;
+                }, mainScene.widthProperty())
+            );
+        }
 
         Label xpLabel = new Label("Level " + xpManager.getCurrentLevel());
-        xpLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 14));
+        if (mainScene != null) {
+            xpLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = mainScene.getWidth();
+                    double baseSize = width < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, mainScene.widthProperty())
+            );
+        }
 
         progressArea.getChildren().addAll(questProgressLabel, progressBar, xpLabel);
 
@@ -298,10 +448,26 @@ public class App extends Application implements TimerEventListener {
     }
 
     private VBox createSimplifiedSidebar() {
-        VBox sidebar = new VBox(20);
+        VBox sidebar = new VBox();
         sidebar.setAlignment(Pos.CENTER);
         sidebar.setPadding(new Insets(20, 10, 20, 10));
+        sidebar.setSpacing(20);
         sidebar.setStyle("-fx-background-color: rgba(0,0,0,0.1);");
+        
+        if (mainScene != null) {
+            sidebar.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double basePadding = mainScene.getWidth() < 800 ? 15.0 : 20.0;
+                    return new Insets(basePadding, 10, basePadding, 10);
+                }, mainScene.widthProperty())
+            );
+            
+            sidebar.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return mainScene.getWidth() < 800 ? 15.0 : 20.0;
+                }, mainScene.widthProperty())
+            );
+        }
 
         String iconStyle = "-fx-cursor: hand; -fx-background-color: transparent;";
 
@@ -388,7 +554,7 @@ public class App extends Application implements TimerEventListener {
 
         header.getChildren().addAll(title, spacer, closeBtn);
 
-        TextArea helpText = new TextArea();
+        Label helpText = new Label();
         helpText.setText("FocusFlow - Productivity with Gamification\n\n" +
                 "Quick Start:\n" +
                 "1. Click '+ Add Task' to create your first task\n" +
@@ -411,8 +577,9 @@ public class App extends Application implements TimerEventListener {
                 "• Use the quick-add field for rapid task entry\n" +
                 "• Check the progress bar to see quest completion");
         helpText.setWrapText(true);
-        helpText.setEditable(false);
-        helpText.setPrefHeight(300);
+        helpText.setPrefWidth(400);
+        helpText.setMaxHeight(300);
+        helpText.setStyle("-fx-padding: 10;");
 
         Button gotItBtn = new Button("Got it!");
         gotItBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; " +
@@ -446,19 +613,18 @@ public class App extends Application implements TimerEventListener {
     private void onTaskSelected(Task task) {
         currentTask = task;
         currentTaskLabel.setText("Working on: " + task.getName());
+        
+        // Set task ID for both timers
         workTimer.setCurrentTaskId(task.getId().toString());
+        
+        System.out.println("Task selected: " + task.getName() + " (ID: " + task.getId().toString() + ")");
 
         // Switch to work mode if on break
         if (isOnBreak) {
             switchToWorkMode();
         }
 
-        // Auto-start timer if not running
-        if (workTimer.getState() != TimerState.RUNNING) {
-            workTimer.start();
-        }
         updateQuestProgress();
-
     }
 
     private void onTasksUpdated(Runnable callback) {
@@ -484,10 +650,8 @@ public class App extends Application implements TimerEventListener {
     }
 
     private void showWallpaperSelection() {
-        Stage currentStage = (Stage) startButton.getScene().getWindow();
-
         WallpaperSelectionDialog wallpaperDialog = new WallpaperSelectionDialog(
-                currentStage,
+                primaryStage,
                 userPreferences,
                 pixelFont,
                 this::onWallpaperChanged);
@@ -496,17 +660,16 @@ public class App extends Application implements TimerEventListener {
     }
 
     private void onWallpaperChanged(String newWallpaperFilename) {
-        Scene currentScene = backgroundImageView.getScene();
-        double width = currentScene.getWidth();
-        double height = currentScene.getHeight();
+        double width = mainScene.getWidth();
+        double height = mainScene.getHeight();
 
         ImageView newBackground = BackgroundManager.createBackgroundImageView(
                 newWallpaperFilename, width, height);
 
-        newBackground.fitWidthProperty().bind(currentScene.widthProperty());
-        newBackground.fitHeightProperty().bind(currentScene.heightProperty());
+        newBackground.fitWidthProperty().bind(mainScene.widthProperty());
+        newBackground.fitHeightProperty().bind(mainScene.heightProperty());
 
-        AnchorPane root = (AnchorPane) currentScene.getRoot();
+        AnchorPane root = (AnchorPane) mainScene.getRoot();
         root.getChildren().remove(backgroundImageView);
         root.getChildren().add(0, newBackground);
 
@@ -524,29 +687,55 @@ public class App extends Application implements TimerEventListener {
 
         PomodoroTimer currentTimer = isOnBreak ? breakTimer : workTimer;
 
+        System.out.println("Toggle timer called. Current state: " + currentTimer.getState() + 
+                          ", isOnBreak: " + isOnBreak + 
+                          ", currentTask: " + (currentTask != null ? currentTask.getName() : "null"));
+
         if (currentTimer.getState() == TimerState.RUNNING) {
             currentTimer.pause();
             startButton.setText("START");
+            System.out.println("Timer paused");
         } else {
             if (!isOnBreak && currentTask == null) {
                 showAlert("No Task Selected", "Please select a task first using 'Select Task' button!");
                 return;
             }
+            
+            System.out.println("Starting timer. Remaining seconds: " + currentTimer.getRemainingTime());
             currentTimer.start();
             startButton.setText("PAUSE");
+            System.out.println("Timer started");
         }
     }
 
     private void switchToWorkMode() {
+        System.out.println("Switching to work mode");
         isOnBreak = false;
         timerTypeLabel.setText("WORK SESSION");
-        updateTimerDisplay(25 * 60);
+        
+        // Reset work timer
+        workTimer.reset();
+        updateTimerDisplay(workTimer.getRemainingTime());
+        
+        // Stop break timer if it's running
+        if (breakTimer.getState() == TimerState.RUNNING) {
+            breakTimer.stop();
+        }
     }
 
     private void switchToBreakMode() {
+        System.out.println("Switching to break mode");
         isOnBreak = true;
         timerTypeLabel.setText("BREAK TIME");
-        updateTimerDisplay(5 * 60);
+        
+        // Reset break timer
+        breakTimer.reset();
+        updateTimerDisplay(breakTimer.getRemainingTime());
+        
+        // Stop work timer if it's running
+        if (workTimer.getState() == TimerState.RUNNING) {
+            workTimer.stop();
+        }
     }
 
     private void toggleSound() {
@@ -567,10 +756,9 @@ public class App extends Application implements TimerEventListener {
     }
 
     private void toggleFullscreen() {
-        Stage stage = (Stage) startButton.getScene().getWindow();
-        boolean isCurrentlyFullscreen = stage.isFullScreen();
+        boolean isCurrentlyFullscreen = primaryStage.isFullScreen();
 
-        stage.setFullScreen(!isCurrentlyFullscreen);
+        primaryStage.setFullScreen(!isCurrentlyFullscreen);
         userPreferences.setFullscreenEnabled(!isCurrentlyFullscreen);
 
         backgroundImageView.setPreserveRatio(false);
@@ -582,15 +770,14 @@ public class App extends Application implements TimerEventListener {
         String timeText = String.format("%02d:%02d", minutes, remainingSeconds);
 
         // Add color transition based on time remaining
+        String baseStyle = "-fx-font-family: '" + pixelFont.getFamily() + "'; -fx-font-weight: bold;";
+        
         if (seconds <= 60) { // Last minute - red
-            timerLabel.setStyle("-fx-text-fill: #F44336; -fx-font-family: '" + pixelFont.getFamily()
-                    + "'; -fx-font-size: 48px; -fx-font-weight: bold;");
+            timerLabel.setStyle(baseStyle + "-fx-text-fill: #F44336;");
         } else if (seconds <= 300) { // Last 5 minutes - orange
-            timerLabel.setStyle("-fx-text-fill: #FF9800; -fx-font-family: '" + pixelFont.getFamily()
-                    + "'; -fx-font-size: 48px; -fx-font-weight: bold;");
+            timerLabel.setStyle(baseStyle + "-fx-text-fill: #FF9800;");
         } else {
-            timerLabel.setStyle("-fx-text-fill: black; -fx-font-family: '" + pixelFont.getFamily()
-                    + "'; -fx-font-size: 48px; -fx-font-weight: bold;");
+            timerLabel.setStyle(baseStyle + "-fx-text-fill: black;");
         }
 
         timerLabel.setText(timeText);
@@ -678,23 +865,33 @@ public class App extends Application implements TimerEventListener {
     // Timer Event Listeners
     @Override
     public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> startButton.setText("PAUSE"));
+        Platform.runLater(() -> {
+            startButton.setText("PAUSE");
+            System.out.println("Timer started event received");
+        });
     }
 
     @Override
     public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> startButton.setText("START"));
+        Platform.runLater(() -> {
+            startButton.setText("START");
+            System.out.println("Timer paused event received");
+        });
     }
 
     @Override
     public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> startButton.setText("PAUSE"));
+        Platform.runLater(() -> {
+            startButton.setText("PAUSE");
+            System.out.println("Timer resumed event received");
+        });
     }
 
     @Override
     public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
         Platform.runLater(() -> {
             startButton.setText("START");
+            System.out.println("Timer completed event received");
 
             if (isOnBreak) {
                 // Break completed - prompt for next work session
@@ -712,7 +909,10 @@ public class App extends Application implements TimerEventListener {
 
     @Override
     public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> startButton.setText("START"));
+        Platform.runLater(() -> {
+            startButton.setText("START");
+            System.out.println("Timer stopped event received");
+        });
     }
 
     @Override
@@ -722,7 +922,10 @@ public class App extends Application implements TimerEventListener {
 
     @Override
     public void onTimerReset(com.focusflow.core.timer.Timer timer) {
-        Platform.runLater(() -> startButton.setText("START"));
+        Platform.runLater(() -> {
+            startButton.setText("START");
+            System.out.println("Timer reset event received");
+        });
     }
 
     public static void main(String[] args) {

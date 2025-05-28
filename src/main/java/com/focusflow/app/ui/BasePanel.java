@@ -1,6 +1,7 @@
 package com.focusflow.app.ui;
 
 import javafx.animation.ScaleTransition;
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -19,18 +20,18 @@ import javafx.util.Duration;
 
 /**
  * Base class for all overlay panels in the FocusFlow application.
- * Provides consistent styling, header management, and common functionality.
+ * Enhanced with responsive design that adapts to screen size.
  * 
  * Features:
+ * - Responsive sizing based on screen dimensions
  * - Consistent header with title and close button
  * - Modern card-like appearance with shadows and rounded corners
- * - Responsive design that adapts to content
  * - Built-in button styling and animation effects
  * - Accessibility support with proper focus management
  * - Theme-aware styling system
  * 
  * @author FocusFlow Team
- * @version 2.0 - Enhanced Styling and Accessibility
+ * @version 2.1 - Responsive Design Enhancement
  */
 public abstract class BasePanel extends VBox {
 
@@ -45,6 +46,12 @@ public abstract class BasePanel extends VBox {
     private VBox contentContainer;
     private HBox footerContainer;
 
+    // Responsive sizing constants (as percentages of screen size)
+    private static final double MIN_WIDTH_PERCENT = 0.25; // 25% of screen width minimum
+    private static final double MAX_WIDTH_PERCENT = 0.85; // 85% of screen width maximum
+    private static final double DEFAULT_WIDTH_PERCENT = 0.6; // 60% of screen width default
+    private static final double MAX_HEIGHT_PERCENT = 0.85; // 85% of screen height maximum
+
     // Styling constants
     private static final String PANEL_BACKGROUND_COLOR = "white";
     private static final String PANEL_BORDER_COLOR = "#E9ECEF";
@@ -52,8 +59,6 @@ public abstract class BasePanel extends VBox {
     private static final String CLOSE_BUTTON_COLOR = "#6C757D";
     private static final String CLOSE_BUTTON_HOVER_COLOR = "#495057";
     private static final double PANEL_BORDER_RADIUS = 15.0;
-    private static final double CONTENT_PADDING = 20.0;
-    private static final double HEADER_PADDING = 15.0;
 
     /**
      * Creates a new BasePanel with the specified title.
@@ -76,6 +81,9 @@ public abstract class BasePanel extends VBox {
 
         // Apply accessibility features
         setupAccessibility();
+
+        // Setup responsive sizing
+        setupResponsiveDesign();
     }
 
     /**
@@ -96,6 +104,9 @@ public abstract class BasePanel extends VBox {
             createContent();
             setupAccessibility();
         }
+
+        // Always setup responsive design
+        setupResponsiveDesign();
     }
 
     /**
@@ -113,13 +124,73 @@ public abstract class BasePanel extends VBox {
     protected abstract void createContent();
 
     /**
+     * Sets up responsive design bindings for the panel.
+     */
+    private void setupResponsiveDesign() {
+        // Bind panel width to screen size
+        sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                setupSizeBindings(newScene);
+            }
+        });
+
+        // If scene is already available, setup bindings immediately
+        if (getScene() != null) {
+            setupSizeBindings(getScene());
+        }
+    }
+
+    /**
+     * Sets up size bindings based on the scene.
+     */
+    private void setupSizeBindings(javafx.scene.Scene scene) {
+        // Responsive width - between 25% and 85% of screen width
+        minWidthProperty().bind(
+                Bindings.max(300, // Absolute minimum
+                        scene.widthProperty().multiply(MIN_WIDTH_PERCENT)));
+
+        maxWidthProperty().bind(
+                Bindings.min(1000, // Absolute maximum for readability
+                        scene.widthProperty().multiply(MAX_WIDTH_PERCENT)));
+
+        prefWidthProperty().bind(
+                Bindings.min(
+                        scene.widthProperty().multiply(DEFAULT_WIDTH_PERCENT),
+                        maxWidthProperty()));
+
+        // Responsive height - maximum 85% of screen height
+        maxHeightProperty().bind(
+                scene.heightProperty().multiply(MAX_HEIGHT_PERCENT));
+
+        // Responsive padding and spacing based on screen size
+        contentContainer.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = scene.getWidth();
+                    double basePadding = width < 800 ? 15 : 20; // Smaller padding on small screens
+                    return new Insets(basePadding);
+                }, scene.widthProperty()));
+
+        contentContainer.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    double width = scene.getWidth();
+                    return width < 800 ? 12.0 : 15.0; // Smaller spacing on small screens
+                }, scene.widthProperty()));
+
+        // Responsive header padding
+        headerContainer.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double width = scene.getWidth();
+                    double basePadding = width < 800 ? 12 : 15;
+                    return new Insets(basePadding);
+                }, scene.widthProperty()));
+    }
+
+    /**
      * Initializes the base panel structure and styling.
      */
     private void initializePanel() {
         setSpacing(0);
         setMaxHeight(Region.USE_PREF_SIZE);
-        setMaxWidth(600); // Reasonable max width for readability
-        setMinWidth(300); // Minimum width for usability
 
         // Create modern card-like appearance
         setStyle(String.format(
@@ -149,16 +220,19 @@ public abstract class BasePanel extends VBox {
     private void createHeader(String title) {
         headerContainer = new HBox();
         headerContainer.setAlignment(Pos.CENTER_LEFT);
-        headerContainer.setPadding(new Insets(HEADER_PADDING, HEADER_PADDING, HEADER_PADDING, HEADER_PADDING));
         headerContainer.setStyle(String.format(
                 "-fx-background-color: %s; " +
                         "-fx-background-radius: %.1f %.1f 0 0;",
                 HEADER_BACKGROUND_COLOR,
                 PANEL_BORDER_RADIUS, PANEL_BORDER_RADIUS));
 
-        // Title label
+        // Title label with responsive font size
         titleLabel = new Label(title);
-        titleLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 18));
+        titleLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 16.0 : 18.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, sceneProperty()));
         titleLabel.setTextFill(Color.web("#212529"));
 
         // Spacer to push close button to the right
@@ -182,8 +256,6 @@ public abstract class BasePanel extends VBox {
      */
     private void createContentArea() {
         contentContainer = new VBox();
-        contentContainer.setPadding(new Insets(CONTENT_PADDING));
-        contentContainer.setSpacing(15);
         VBox.setVgrow(contentContainer, Priority.ALWAYS);
         getChildren().add(contentContainer);
     }
@@ -194,9 +266,13 @@ public abstract class BasePanel extends VBox {
     private void createFooter() {
         footerContainer = new HBox();
         footerContainer.setAlignment(Pos.CENTER_RIGHT);
-        footerContainer.setPadding(new Insets(0, CONTENT_PADDING, CONTENT_PADDING, CONTENT_PADDING));
+        footerContainer.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double basePadding = getScene() != null && getScene().getWidth() < 800 ? 15 : 20;
+                    return new Insets(0, basePadding, basePadding, basePadding);
+                }, sceneProperty()));
         footerContainer.setSpacing(10);
-        footerContainer.setVisible(false); // Hidden by default
+        footerContainer.setVisible(false);
         footerContainer.setManaged(false);
         getChildren().add(footerContainer);
     }
@@ -208,7 +284,11 @@ public abstract class BasePanel extends VBox {
      */
     private Button createCloseButton() {
         Button closeBtn = new Button("✕");
-        closeBtn.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, 16));
+        closeBtn.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 14.0 : 16.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.NORMAL, baseSize);
+                }, sceneProperty()));
         closeBtn.setStyle(String.format(
                 "-fx-background-color: transparent; " +
                         "-fx-text-fill: %s; " +
@@ -309,7 +389,11 @@ public abstract class BasePanel extends VBox {
      * @return An HBox containing the styled buttons
      */
     protected HBox createButtonRow(Button... buttons) {
-        HBox buttonBox = new HBox(10);
+        HBox buttonBox = new HBox();
+        buttonBox.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return getScene() != null && getScene().getWidth() < 800 ? 8.0 : 10.0;
+                }, sceneProperty()));
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
 
         for (Button button : buttons) {
@@ -357,6 +441,13 @@ public abstract class BasePanel extends VBox {
                         "-fx-font-weight: bold; " +
                         "-fx-cursor: hand;");
 
+        // Responsive font size
+        button.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, sceneProperty()));
+
         if (action != null) {
             button.setOnAction(e -> action.run());
         }
@@ -381,6 +472,13 @@ public abstract class BasePanel extends VBox {
                         "-fx-padding: 10px 20px; " +
                         "-fx-font-weight: bold; " +
                         "-fx-cursor: hand;");
+
+        // Responsive font size
+        button.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, sceneProperty()));
 
         if (action != null) {
             button.setOnAction(e -> action.run());
@@ -407,6 +505,13 @@ public abstract class BasePanel extends VBox {
                         "-fx-font-weight: bold; " +
                         "-fx-cursor: hand;");
 
+        // Responsive font size
+        button.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, sceneProperty()));
+
         if (action != null) {
             button.setOnAction(e -> action.run());
         }
@@ -432,6 +537,13 @@ public abstract class BasePanel extends VBox {
                         "-fx-font-weight: bold; " +
                         "-fx-cursor: hand;");
 
+        // Responsive font size
+        button.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 12.0 : 14.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                }, sceneProperty()));
+
         if (action != null) {
             button.setOnAction(e -> action.run());
         }
@@ -441,12 +553,19 @@ public abstract class BasePanel extends VBox {
     }
 
     /**
-     * Applies consistent styling to a button.
+     * Applies consistent styling to a button with responsive font sizing.
      * 
      * @param button The button to style
      */
     private void styleButton(Button button) {
-        button.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, 14));
+        // Apply responsive font size if not already set
+        if (button.getFont() == null || button.getFont().getSize() <= 12) {
+            button.fontProperty().bind(
+                    Bindings.createObjectBinding(() -> {
+                        double baseSize = getScene() != null && getScene().getWidth() < 800 ? 12.0 : 14.0;
+                        return Font.font(pixelFont.getFamily(), FontWeight.NORMAL, baseSize);
+                    }, sceneProperty()));
+        }
 
         // Add animations if not already present
         if (button.getOnMouseEntered() == null) {
@@ -460,6 +579,9 @@ public abstract class BasePanel extends VBox {
      * @param button The button to animate
      */
     private void addButtonAnimations(Button button) {
+        // Store original action if it exists
+        final javafx.event.EventHandler<javafx.event.ActionEvent> originalHandler = button.getOnAction();
+
         // Hover effects
         button.setOnMouseEntered(e -> {
             ScaleTransition scale = new ScaleTransition(Duration.millis(150), button);
@@ -475,15 +597,7 @@ public abstract class BasePanel extends VBox {
             scale.play();
         });
 
-        // Click animation
-        Runnable originalAction = null;
-        if (button.getOnAction() != null) {
-            // Store original action
-            final javafx.event.EventHandler<javafx.event.ActionEvent> originalHandler = button.getOnAction();
-            originalAction = () -> originalHandler.handle(new javafx.event.ActionEvent());
-        }
-
-        final Runnable finalOriginalAction = originalAction;
+        // Click animation with original action preservation
         button.setOnAction(e -> {
             // Quick scale down and back up
             ScaleTransition press = new ScaleTransition(Duration.millis(100), button);
@@ -498,8 +612,8 @@ public abstract class BasePanel extends VBox {
             press.play();
 
             // Execute original action
-            if (finalOriginalAction != null) {
-                finalOriginalAction.run();
+            if (originalHandler != null) {
+                originalHandler.handle(e);
             }
         });
     }
@@ -511,11 +625,19 @@ public abstract class BasePanel extends VBox {
      * @return A styled separator
      */
     protected VBox createSection(String labelText) {
-        VBox section = new VBox(10);
+        VBox section = new VBox();
+        section.spacingProperty().bind(
+                Bindings.createDoubleBinding(() -> {
+                    return getScene() != null && getScene().getWidth() < 800 ? 8.0 : 10.0;
+                }, sceneProperty()));
 
         if (labelText != null && !labelText.trim().isEmpty()) {
             Label sectionLabel = new Label(labelText);
-            sectionLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 16));
+            sectionLabel.fontProperty().bind(
+                    Bindings.createObjectBinding(() -> {
+                        double baseSize = getScene() != null && getScene().getWidth() < 800 ? 14.0 : 16.0;
+                        return Font.font(pixelFont.getFamily(), FontWeight.BOLD, baseSize);
+                    }, sceneProperty()));
             sectionLabel.setTextFill(Color.web("#495057"));
             section.getChildren().add(sectionLabel);
         }
@@ -531,7 +653,11 @@ public abstract class BasePanel extends VBox {
      */
     protected Label createHelpText(String text) {
         Label helpLabel = new Label(text);
-        helpLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, 12));
+        helpLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double baseSize = getScene() != null && getScene().getWidth() < 800 ? 10.0 : 12.0;
+                    return Font.font(pixelFont.getFamily(), FontWeight.NORMAL, baseSize);
+                }, sceneProperty()));
         helpLabel.setTextFill(Color.web("#6C757D"));
         helpLabel.setWrapText(true);
         return helpLabel;
@@ -553,5 +679,41 @@ public abstract class BasePanel extends VBox {
      */
     protected Font getPixelFont() {
         return pixelFont;
+    }
+
+    /**
+     * Gets responsive font size based on screen width.
+     * 
+     * @param baseSize The base font size
+     * @return Responsive font size
+     */
+    protected double getResponsiveFontSize(double baseSize) {
+        if (getScene() == null)
+            return baseSize;
+        return getScene().getWidth() < 800 ? baseSize * 0.85 : baseSize;
+    }
+
+    /**
+     * Gets responsive spacing based on screen width.
+     * 
+     * @param baseSpacing The base spacing value
+     * @return Responsive spacing value
+     */
+    protected double getResponsiveSpacing(double baseSpacing) {
+        if (getScene() == null)
+            return baseSpacing;
+        return getScene().getWidth() < 800 ? baseSpacing * 0.8 : baseSpacing;
+    }
+
+    /**
+     * Gets responsive padding based on screen width.
+     * 
+     * @param basePadding The base padding value
+     * @return Responsive padding value
+     */
+    protected double getResponsivePadding(double basePadding) {
+        if (getScene() == null)
+            return basePadding;
+        return getScene().getWidth() < 800 ? basePadding * 0.75 : basePadding;
     }
 }
