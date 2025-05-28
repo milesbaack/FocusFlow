@@ -15,8 +15,6 @@ import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -29,7 +27,6 @@ import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -40,19 +37,7 @@ import javafx.scene.text.FontWeight;
 
 /**
  * Task Selection Panel for choosing which task to work on.
- * Provides intelligent task recommendations, filtering, and quick selection.
- * 
- * Features:
- * - Smart task recommendations based on priority and due dates
- * - Real-time search and filtering
- * - Multiple sorting options (priority, due date, alphabetical)
- * - Quick selection with keyboard shortcuts
- * - Task preview with detailed information
- * - Empty state handling with helpful suggestions
- * - Recent tasks section for quick re-selection
- * 
- * @author FocusFlow Team
- * @version 2.0 - Enhanced Selection Intelligence
+ * FIXED VERSION - Addresses button and selection issues
  */
 public class TaskSelectionPanel extends BasePanel {
 
@@ -88,14 +73,6 @@ public class TaskSelectionPanel extends BasePanel {
     private Task selectedTask;
     private String currentSearchText = "";
 
-    /**
-     * Creates a new TaskSelectionPanel.
-     * 
-     * @param overlayManager The overlay manager for panel lifecycle
-     * @param pixelFont      The font for consistent typography
-     * @param tasks          The list of all tasks to choose from
-     * @param onTaskSelected Callback when a task is selected
-     */
     public TaskSelectionPanel(OverlayManager overlayManager, Font pixelFont,
             List<Task> tasks, Consumer<Task> onTaskSelected) {
         super(overlayManager, pixelFont, "Select Task to Work On", true);
@@ -116,9 +93,6 @@ public class TaskSelectionPanel extends BasePanel {
         setupKeyboardShortcuts();
     }
 
-    /**
-     * Prepares and analyzes task data for intelligent recommendations.
-     */
     private void prepareTaskData() {
         // Filter incomplete tasks
         incompleteTasks = tasks.stream()
@@ -133,34 +107,23 @@ public class TaskSelectionPanel extends BasePanel {
         generateRecommendations();
     }
 
-    /**
-     * Generates intelligent task recommendations based on various factors.
-     */
     private void generateRecommendations() {
         recommendedTasks = incompleteTasks.stream()
                 .sorted(Comparator
-                        // 1. Overdue tasks first
                         .<Task>comparingInt(task -> task.hasDueDateTime() &&
                                 task.getDueDateTime().isBefore(LocalDateTime.now()) ? 0 : 1)
-                        // 2. Then by priority (urgent first)
                         .thenComparing(task -> task.getPriority().getValue(), Comparator.reverseOrder())
-                        // 3. Then by due date (sooner first)
                         .thenComparing(task -> task.hasDueDateTime() ? task.getDueDateTime() : LocalDateTime.MAX)
-                        // 4. Finally alphabetical
                         .thenComparing(Task::getName))
-                .limit(5) // Top 5 recommendations
+                .limit(5)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Creates the empty state when no incomplete tasks are available.
-     */
     private void createEmptyState() {
         emptyStateBox = new VBox(20);
         emptyStateBox.setAlignment(Pos.CENTER);
         emptyStateBox.setPadding(new Insets(40));
 
-        // Empty state icon (using text for simplicity)
         Label emptyIcon = new Label("📋");
         emptyIcon.setFont(Font.font(48));
 
@@ -176,16 +139,12 @@ public class TaskSelectionPanel extends BasePanel {
         emptyMessage.setWrapText(true);
 
         createTaskButton = createPrimaryButton("Create Your First Task", this::createNewTask);
-
         Button cancelButton = createSecondaryButton("Cancel", () -> getOverlayManager().hideCurrentOverlay());
 
         emptyStateBox.getChildren().addAll(emptyIcon, emptyTitle, emptyMessage, createTaskButton, cancelButton);
         addContent(emptyStateBox);
     }
 
-    /**
-     * Creates the main task selection interface.
-     */
     private void createTaskSelectionInterface() {
         // Search and filter section
         VBox searchSection = createSearchAndFilterSection();
@@ -206,11 +165,6 @@ public class TaskSelectionPanel extends BasePanel {
         setupListViewHandlers();
     }
 
-    /**
-     * Creates the search and filter controls.
-     * 
-     * @return VBox containing search and filter UI
-     */
     private VBox createSearchAndFilterSection() {
         VBox section = createSection("Search & Filter");
 
@@ -274,11 +228,6 @@ public class TaskSelectionPanel extends BasePanel {
         return section;
     }
 
-    /**
-     * Creates the smart recommendations section.
-     * 
-     * @return VBox containing recommendations UI
-     */
     private VBox createRecommendationsSection() {
         VBox section = createSection("Recommended Tasks");
 
@@ -293,15 +242,14 @@ public class TaskSelectionPanel extends BasePanel {
         recommendedListView.setItems(FXCollections.observableArrayList(recommendedTasks));
         recommendedListView.setCellFactory(listView -> new TaskCell(true));
         recommendedListView.setPrefHeight(Math.min(120, recommendedTasks.size() * 40 + 10));
-        recommendedListView.getSelectionModel().selectedItemProperty().addListener(
-                (obs, oldTask, newTask) -> handleTaskSelection(newTask, recommendedListView));
 
-        // Double-click to select
-        recommendedListView.setOnMouseClicked(e -> {
-            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
-                selectCurrentTask();
-            }
-        });
+        // FIXED: Proper selection handling
+        recommendedListView.getSelectionModel().selectedItemProperty().addListener(
+                (obs, oldTask, newTask) -> {
+                    if (newTask != null) {
+                        handleTaskSelection(newTask, recommendedListView);
+                    }
+                });
 
         Label recommendationHelp = createHelpText(
                 "These tasks are recommended based on priority, due dates, and urgency.");
@@ -310,11 +258,6 @@ public class TaskSelectionPanel extends BasePanel {
         return section;
     }
 
-    /**
-     * Creates the all tasks section with filtering.
-     * 
-     * @return VBox containing all tasks UI
-     */
     private VBox createAllTasksSection() {
         VBox section = createSection("All Tasks");
 
@@ -322,15 +265,14 @@ public class TaskSelectionPanel extends BasePanel {
         taskListView.setItems(sortedTasks);
         taskListView.setCellFactory(listView -> new TaskCell(false));
         taskListView.setPrefHeight(200);
-        taskListView.getSelectionModel().selectedItemProperty().addListener(
-                (obs, oldTask, newTask) -> handleTaskSelection(newTask, taskListView));
 
-        // Double-click to select
-        taskListView.setOnMouseClicked(e -> {
-            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
-                selectCurrentTask();
-            }
-        });
+        // FIXED: Proper selection handling
+        taskListView.getSelectionModel().selectedItemProperty().addListener(
+                (obs, oldTask, newTask) -> {
+                    if (newTask != null) {
+                        handleTaskSelection(newTask, taskListView);
+                    }
+                });
 
         // Status label
         statusLabel = new Label(incompleteTasks.size() + " tasks available");
@@ -341,11 +283,6 @@ public class TaskSelectionPanel extends BasePanel {
         return section;
     }
 
-    /**
-     * Creates the task selection info and action buttons.
-     * 
-     * @return VBox containing selection UI
-     */
     private VBox createSelectionSection() {
         VBox section = new VBox(10);
         section.setAlignment(Pos.CENTER_RIGHT);
@@ -359,13 +296,16 @@ public class TaskSelectionPanel extends BasePanel {
         HBox buttonBox = new HBox(10);
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
 
-        // Enhanced button creation with explicit styling
+        // FIXED: Simplified button creation
         selectButton = new Button("Start Working");
-        selectButton.setOnAction(e -> selectCurrentTask());
-        selectButton.setDisable(true);
         selectButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; " +
                 "-fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 8 16; " +
                 "-fx-background-radius: 4;");
+        selectButton.setDisable(true);
+        selectButton.setOnAction(e -> {
+            System.out.println("[TaskSelectionPanel] Select button clicked");
+            selectCurrentTask();
+        });
 
         Button createButton = createSecondaryButton("Create New Task", this::createNewTask);
         Button cancelButton = createSecondaryButton("Cancel", () -> getOverlayManager().hideCurrentOverlay());
@@ -376,9 +316,6 @@ public class TaskSelectionPanel extends BasePanel {
         return section;
     }
 
-    /**
-     * Sets up event handlers for search and filter components.
-     */
     private void setupFilterHandlers() {
         // Search field
         searchField.textProperty().addListener((obs, oldText, newText) -> {
@@ -401,9 +338,7 @@ public class TaskSelectionPanel extends BasePanel {
         applyFilters();
     }
 
-    /**
-     * Sets up event handlers for both list views.
-     */
+    // FIXED: Simplified list view handlers
     private void setupListViewHandlers() {
         // Double-click handler for task list
         taskListView.setOnMouseClicked(e -> {
@@ -411,6 +346,7 @@ public class TaskSelectionPanel extends BasePanel {
                 Task clickedTask = taskListView.getSelectionModel().getSelectedItem();
                 if (clickedTask != null) {
                     selectedTask = clickedTask;
+                    System.out.println("[TaskSelectionPanel] Double-clicked task: " + selectedTask.getName());
                     selectCurrentTask();
                 }
             }
@@ -423,6 +359,8 @@ public class TaskSelectionPanel extends BasePanel {
                     Task clickedTask = recommendedListView.getSelectionModel().getSelectedItem();
                     if (clickedTask != null) {
                         selectedTask = clickedTask;
+                        System.out.println(
+                                "[TaskSelectionPanel] Double-clicked recommended task: " + selectedTask.getName());
                         selectCurrentTask();
                     }
                 }
@@ -430,9 +368,6 @@ public class TaskSelectionPanel extends BasePanel {
         }
     }
 
-    /**
-     * Applies current filter settings to the task list.
-     */
     private void applyFilters() {
         Predicate<Task> filter = task -> {
             // Search filter
@@ -471,7 +406,6 @@ public class TaskSelectionPanel extends BasePanel {
                         if (task.getPriority() != TaskPriority.HIGH)
                             return false;
                         break;
-                    // "All" allows everything through
                 }
             }
 
@@ -482,9 +416,6 @@ public class TaskSelectionPanel extends BasePanel {
         updateStatusLabel();
     }
 
-    /**
-     * Applies the selected sorting to the task list.
-     */
     private void applySorting() {
         String sortType = sortCombo.getValue();
         Comparator<Task> comparator;
@@ -522,12 +453,14 @@ public class TaskSelectionPanel extends BasePanel {
         sortedTasks.setComparator(comparator);
     }
 
-    /**
-     * Updates the status label with current filter results.
-     */
     private void updateStatusLabel() {
         int visibleCount = filteredTasks.size();
         int totalCount = incompleteTasks.size();
+
+        if (statusLabel == null) {
+            System.out.println("[TaskSelectionPanel] statusLabel is null, skipping update");
+            return;
+        }
 
         if (visibleCount == totalCount) {
             statusLabel.setText(totalCount + " tasks available");
@@ -536,17 +469,13 @@ public class TaskSelectionPanel extends BasePanel {
         }
     }
 
-    /**
-     * Handles task selection from either list view.
-     * 
-     * @param task       The selected task
-     * @param sourceList The list view that triggered the selection
-     */
+    // FIXED: Simplified task selection handler
     private void handleTaskSelection(Task task, ListView<Task> sourceList) {
-        System.out.println("[DEBUG] Task selected: " + (task != null ? task.getName() : "null"));
+        System.out.println("[TaskSelectionPanel] Task selected: " + (task != null ? task.getName() : "null"));
 
         this.selectedTask = task;
 
+        // Clear other list's selection to avoid conflicts
         if (sourceList == taskListView && recommendedListView != null) {
             recommendedListView.getSelectionModel().clearSelection();
         } else if (sourceList == recommendedListView && taskListView != null) {
@@ -554,12 +483,8 @@ public class TaskSelectionPanel extends BasePanel {
         }
 
         updateSelectionInfo();
-        selectButton.setDisable(selectedTask == null);
     }
 
-    /**
-     * Updates the selection info display and button states.
-     */
     private void updateSelectionInfo() {
         if (selectedTask == null) {
             selectedTaskInfo.setText("Select a task to see details");
@@ -572,7 +497,6 @@ public class TaskSelectionPanel extends BasePanel {
         info.append("Selected: ").append(selectedTask.getName());
         info.append("\nPriority: ").append(selectedTask.getPriority().name());
 
-        // Add these missing details
         if (selectedTask.hasDueDateTime()) {
             info.append("\nDue: ").append(selectedTask.getDueDateTime().toLocalDate());
         }
@@ -580,34 +504,30 @@ public class TaskSelectionPanel extends BasePanel {
             info.append("\nDetails: ").append(selectedTask.getDescription());
         }
 
-        // Enable the select button and update info
-        selectButton.setDisable(false);
         selectedTaskInfo.setText(info.toString());
+        selectButton.setDisable(false);
     }
 
-    /**
-     * Sets up keyboard shortcuts for efficient task selection.
-     */
+    // FIXED: Simplified keyboard shortcuts
     private void setupKeyboardShortcuts() {
-        // Add event filter to consume events meant for this panel
-        addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-            // Only handle events if they're meant for components in this panel
-            if (e.getTarget() instanceof Node &&
-                    ((Node) e.getTarget()).getScene().getFocusOwner() != null &&
-                    isDescendant(getPanelRoot(), ((Node) e.getTarget()).getScene().getFocusOwner())) {
+        // Set focus traversable and request focus
+        setFocusTraversable(true);
 
-                if (e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.SPACE) {
-                    if (selectedTask != null) {
-                        selectCurrentTask();
-                        e.consume(); // Prevent event from bubbling up
-                    }
-                } else if (e.getCode() == KeyCode.ESCAPE) {
-                    getOverlayManager().hideCurrentOverlay();
-                    e.consume();
-                } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
-                    createNewTask();
+        // Handle key events at the panel level
+        setOnKeyPressed(e -> {
+            System.out.println("[TaskSelectionPanel] Key pressed: " + e.getCode());
+
+            if (e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.SPACE) {
+                if (selectedTask != null) {
+                    selectCurrentTask();
                     e.consume();
                 }
+            } else if (e.getCode() == KeyCode.ESCAPE) {
+                getOverlayManager().hideCurrentOverlay();
+                e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
+                createNewTask();
+                e.consume();
             }
         });
 
@@ -615,30 +535,7 @@ public class TaskSelectionPanel extends BasePanel {
         searchField.requestFocus();
     }
 
-    private boolean isDescendant(Object panelRoot, Node focusOwner) {
-        if (focusOwner == null || !(panelRoot instanceof Parent)) {
-            return false;
-        }
-
-        Node current = focusOwner;
-        while (current != null) {
-            if (current == panelRoot) {
-                return true;
-            }
-            current = current.getParent();
-        }
-        return false;
-    }
-
-    private Parent getPanelRoot() {
-        // Return this panel as the root since TaskSelectionPanel extends BasePanel
-        // which is a Parent
-        return this;
-    }
-
-    /**
-     * Selects the current task and closes the panel.
-     */
+    // FIXED: Simplified task selection
     private void selectCurrentTask() {
         System.out.println("[TaskSelectionPanel] selectCurrentTask called");
 
@@ -652,17 +549,13 @@ public class TaskSelectionPanel extends BasePanel {
         }
     }
 
-    /**
-     * Triggers task creation by closing this panel and opening task creation.
-     */
     private void createNewTask() {
         getOverlayManager().hideCurrentOverlay();
         // The parent App class should handle opening the task creation panel
-        // This could be enhanced with a callback system
     }
 
     /**
-     * Custom cell renderer for task list items.
+     * FIXED: Simplified TaskCell implementation
      */
     private class TaskCell extends ListCell<Task> {
         private final boolean isRecommended;

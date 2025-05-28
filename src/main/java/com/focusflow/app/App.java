@@ -135,7 +135,7 @@ public class App extends Application {
         // LEFT: Sidebar
         sidebar = createSimplifiedSidebar();
 
-        // CENTER: Main content with timer
+        // CENTER: Main content with timer (NO overlay container here)
         StackPane mainContent = new StackPane();
 
         // Create TimerPanel with callbacks
@@ -146,12 +146,7 @@ public class App extends Application {
                     /* Timer panel handles its own start/pause logic */ });
         StackPane.setAlignment(timerPanel, Pos.TOP_CENTER);
 
-        // Overlay container
-        StackPane overlayContainer = new StackPane();
-        mainContent.getChildren().addAll(timerPanel, overlayContainer);
-
-        // Initialize overlay manager
-        this.overlayManager = new OverlayManager(overlayContainer);
+        mainContent.getChildren().add(timerPanel); // Only timer, no overlay container
 
         // BOTTOM: Action bar
         bottomArea = createBottomArea();
@@ -160,11 +155,27 @@ public class App extends Application {
         unifiedLayout.setCenter(mainContent);
         unifiedLayout.setBottom(bottomArea);
 
-        root.getChildren().add(unifiedLayout);
+        // CREATE OVERLAY CONTAINER AT ROOT LEVEL (covers everything)
+        StackPane overlayContainer = new StackPane();
+        overlayContainer.setVisible(false); // Hidden by default
+
+        // Initialize overlay manager
+        this.overlayManager = new OverlayManager(overlayContainer);
+
+        // Add both layout and overlay container to root
+        root.getChildren().addAll(unifiedLayout, overlayContainer);
+
+        // Position unifiedLayout
         AnchorPane.setTopAnchor(unifiedLayout, 0.0);
         AnchorPane.setBottomAnchor(unifiedLayout, 0.0);
         AnchorPane.setLeftAnchor(unifiedLayout, 0.0);
         AnchorPane.setRightAnchor(unifiedLayout, 0.0);
+
+        // Position overlay container to cover EVERYTHING
+        AnchorPane.setTopAnchor(overlayContainer, 0.0);
+        AnchorPane.setBottomAnchor(overlayContainer, 0.0);
+        AnchorPane.setLeftAnchor(overlayContainer, 0.0);
+        AnchorPane.setRightAnchor(overlayContainer, 0.0);
 
         return root;
     }
@@ -367,17 +378,30 @@ public class App extends Application {
 
     // Callback methods
     private void onTaskSelected(Task task) {
-        timerPanel.setCurrentTask(task);
+        System.out.println("[App] onTaskSelected called with task: " + (task != null ? task.getName() : "null"));
 
-        // If user selected task during break, switch to work mode
-        if (timerPanel.isOnBreak()) {
-            timerPanel.forceWorkMode();
+        if (task != null) {
+            // Set the task in the timer panel
+            timerPanel.setCurrentTask(task);
+            System.out.println("[App] Task set in timer panel: " + task.getName());
+
+            // If user selected task during break, switch to work mode
+            if (timerPanel.isOnBreak()) {
+                System.out.println("[App] Switching from break to work mode");
+                timerPanel.forceWorkMode();
+            }
+
+            // Don't automatically start the timer - let user click START button
+
+            System.out.println("[App] Task selection complete, user can now start timer");
+
+            updateQuestProgress();
+        } else {
+            System.out.println("[App] No task was selected");
         }
-        timerPanel.startTimer(); // <-- Start timer immediately after selecting a task
 
+        // Close the overlay
         overlayManager.hideCurrentOverlay();
-
-        updateQuestProgress();
     }
 
     private void onTasksUpdated(Runnable callback) {

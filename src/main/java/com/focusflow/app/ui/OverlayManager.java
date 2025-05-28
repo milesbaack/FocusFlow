@@ -73,6 +73,9 @@ public class OverlayManager {
             return; // Prevent rapid-fire calls during animation
         }
 
+        // Make overlay container visible
+        overlayContainer.setVisible(true);
+
         hideCurrentOverlay(() -> {
             currentOverlay = overlay;
             overlayContainer.getChildren().addAll(backgroundDim, overlay);
@@ -96,6 +99,7 @@ public class OverlayManager {
         if (currentOverlay != null && !isAnimating) {
             animateOut(currentOverlay, () -> {
                 overlayContainer.getChildren().removeAll(backgroundDim, currentOverlay);
+                overlayContainer.setVisible(false); // Hide container when no overlay
                 currentOverlay = null;
                 if (onComplete != null) {
                     onComplete.run();
@@ -410,6 +414,7 @@ public class OverlayManager {
 
         if (currentOverlay != null) {
             overlayContainer.getChildren().removeAll(backgroundDim, currentOverlay);
+            overlayContainer.setVisible(false); // Hide container
             currentOverlay = null;
         }
 
