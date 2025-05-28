@@ -6,6 +6,8 @@ import java.util.List;
 
 import com.focusflow.app.ui.BackgroundManager;
 import com.focusflow.app.ui.OverlayManager;
+import com.focusflow.app.ui.QuestCreationPanel;
+import com.focusflow.app.ui.StatsCreationPanel;
 import com.focusflow.app.ui.TaskCreationPanel;
 import com.focusflow.app.ui.TaskManagementPanel;
 import com.focusflow.app.ui.TaskSelectionPanel;
@@ -252,7 +254,7 @@ public class App extends Application implements TimerEventListener {
 
         Button addTaskBtn = new Button("+ Add Task");
         Button viewTasksBtn = new Button("📋 Tasks");
-        Button questsBtn = new Button("🏆 Quests");
+        Button questsBtn = new Button("🏆 Create Quest");
         Button statsBtn = new Button("📊 Stats");
 
         // Style buttons
@@ -351,103 +353,16 @@ public class App extends Application implements TimerEventListener {
     }
 
     private void showQuestManagementOverlay() {
-        VBox questPanel = new VBox(20);
-        questPanel.setPadding(new Insets(20));
-        questPanel.setStyle("-fx-background-color: white; -fx-background-radius: 15 15 0 0; " +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 15, 0, 0, -5);");
-
-        // Header
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        Label title = new Label("Quest Management");
-        title.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 20));
-        title.setTextFill(Color.DARKBLUE);
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Button closeBtn = new Button("✕");
-        closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: gray; " +
-                "-fx-font-size: 16px; -fx-cursor: hand;");
-        closeBtn.setOnAction(e -> overlayManager.hideCurrentOverlay());
-
-        header.getChildren().addAll(title, spacer, closeBtn);
-
-        // Content
-        Label infoLabel = new Label("Organize your tasks into meaningful quests for extra motivation!");
-        infoLabel.setFont(Font.font(pixelFont.getFamily(), 14));
-        infoLabel.setWrapText(true);
-
-        Button createQuestBtn = new Button("Create New Quest");
-        createQuestBtn.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; " +
-                "-fx-background-radius: 8; -fx-padding: 10 20; -fx-font-weight: bold;");
-        createQuestBtn.setOnAction(e -> {
-            overlayManager.hideCurrentOverlay();
-            // Note: QuestStatsGUI integration would go here
-            showAlert("Quest Creation", "Quest creation dialog will open here.\n(Integration with QuestStatsGUI)");
-        });
-
-        // Quest list (simplified for now)
-        Label activeQuestsLabel = new Label("Active Quests: " + questManager.getIncompleteQuests().size());
-        Label completedQuestsLabel = new Label("Completed Quests: " + questManager.getCompletedQuests().size());
-
-        VBox questStats = new VBox(5);
-        questStats.getChildren().addAll(activeQuestsLabel, completedQuestsLabel);
-
-        questPanel.getChildren().addAll(header, infoLabel, createQuestBtn, questStats);
-
-        overlayManager.showOverlay(questPanel, OverlayManager.AnimationType.SLIDE_UP);
+        QuestCreationPanel panel = new QuestCreationPanel(
+                overlayManager, pixelFont, tasks, questManager, this::onQuestsUpdated);
+        overlayManager.showOverlay(panel, OverlayManager.AnimationType.SLIDE_UP);
     }
 
     private void showStatsOverlay() {
-        VBox statsPanel = new VBox(15);
-        statsPanel.setPadding(new Insets(20));
-        statsPanel.setStyle("-fx-background-color: white; -fx-background-radius: 15 15 0 0; " +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 15, 0, 0, -5);");
-
-        // Header
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        Label title = new Label("Quick Stats");
-        title.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 20));
-        title.setTextFill(Color.DARKBLUE);
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Button closeBtn = new Button("✕");
-        closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: gray; " +
-                "-fx-font-size: 16px; -fx-cursor: hand;");
-        closeBtn.setOnAction(e -> overlayManager.hideCurrentOverlay());
-
-        header.getChildren().addAll(title, spacer, closeBtn);
-
-        // Quick stats
-        int totalTasks = tasks.size();
-        int completedTasks = (int) tasks.stream().filter(Task::isComplete).count();
-        int activeTasks = totalTasks - completedTasks;
-
-        VBox statsBox = new VBox(10);
-        statsBox.setStyle("-fx-background-color: #F5F5F5; -fx-padding: 15; -fx-background-radius: 10;");
-        statsBox.getChildren().addAll(
-                createStatRow("Total Tasks:", String.valueOf(totalTasks)),
-                createStatRow("Completed:", String.valueOf(completedTasks)),
-                createStatRow("Active:", String.valueOf(activeTasks)),
-                createStatRow("Current Level:", String.valueOf(xpManager.getCurrentLevel())),
-                createStatRow("XP:", xpManager.getCurrentXp() + " / " + xpManager.getXpForNextLevel()));
-
-        Button viewFullStatsBtn = new Button("View Full Statistics");
-        viewFullStatsBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; " +
-                "-fx-background-radius: 8; -fx-padding: 10 20; -fx-font-weight: bold;");
-        viewFullStatsBtn.setOnAction(e -> {
-            overlayManager.hideCurrentOverlay();
-            // Note: Full statistics window would open here
-            showAlert("Statistics", "Full statistics window will open here.\n(Integration with QuestStatsGUI)");
-        });
-
-        statsPanel.getChildren().addAll(header, statsBox, viewFullStatsBtn);
-
-        overlayManager.showOverlay(statsPanel, OverlayManager.AnimationType.FADE_IN);
+        StatsCreationPanel panel = new StatsCreationPanel(
+                overlayManager, pixelFont, tasks, sessionManager,
+                questManager, achievementManager, xpManager);
+        overlayManager.showOverlay(panel, OverlayManager.AnimationType.FADE_IN);
     }
 
     private void showHelpOverlay() {
@@ -542,6 +457,8 @@ public class App extends Application implements TimerEventListener {
         if (workTimer.getState() != TimerState.RUNNING) {
             workTimer.start();
         }
+        updateQuestProgress();
+
     }
 
     private void onTasksUpdated(Runnable callback) {
@@ -741,6 +658,13 @@ public class App extends Application implements TimerEventListener {
                 toggleTimer();
             }
         });
+    }
+
+    private void onQuestsUpdated(Runnable callback) {
+        updateQuestProgress();
+        if (callback != null) {
+            callback.run();
+        }
     }
 
     private void showAlert(String title, String message) {
