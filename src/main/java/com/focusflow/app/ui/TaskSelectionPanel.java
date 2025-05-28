@@ -1,7 +1,6 @@
 package com.focusflow.app.ui;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
@@ -16,6 +15,8 @@ import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -28,6 +29,7 @@ import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -199,6 +201,9 @@ public class TaskSelectionPanel extends BasePanel {
 
         addContent(searchSection, recommendationsSection, allTasksSection);
         showFooter(selectionSection);
+
+        // Setup handlers
+        setupListViewHandlers();
     }
 
     /**
@@ -354,15 +359,20 @@ public class TaskSelectionPanel extends BasePanel {
         HBox buttonBox = new HBox(10);
         buttonBox.setAlignment(Pos.CENTER_RIGHT);
 
-        selectButton = createSuccessButton("Start Working", this::selectCurrentTask);
+        // Enhanced button creation with explicit styling
+        selectButton = new Button("Start Working");
+        selectButton.setOnAction(e -> selectCurrentTask());
         selectButton.setDisable(true);
+        selectButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; " +
+                "-fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 8 16; " +
+                "-fx-background-radius: 4;");
 
         Button createButton = createSecondaryButton("Create New Task", this::createNewTask);
         Button cancelButton = createSecondaryButton("Cancel", () -> getOverlayManager().hideCurrentOverlay());
 
         buttonBox.getChildren().addAll(createButton, cancelButton, selectButton);
-
         section.getChildren().addAll(selectedTaskInfo, buttonBox);
+
         return section;
     }
 
@@ -389,6 +399,35 @@ public class TaskSelectionPanel extends BasePanel {
         // Initial setup
         applySorting();
         applyFilters();
+    }
+
+    /**
+     * Sets up event handlers for both list views.
+     */
+    private void setupListViewHandlers() {
+        // Double-click handler for task list
+        taskListView.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+                Task clickedTask = taskListView.getSelectionModel().getSelectedItem();
+                if (clickedTask != null) {
+                    selectedTask = clickedTask;
+                    selectCurrentTask();
+                }
+            }
+        });
+
+        // Double-click handler for recommended list
+        if (recommendedListView != null) {
+            recommendedListView.setOnMouseClicked(e -> {
+                if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+                    Task clickedTask = recommendedListView.getSelectionModel().getSelectedItem();
+                    if (clickedTask != null) {
+                        selectedTask = clickedTask;
+                        selectCurrentTask();
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -504,9 +543,10 @@ public class TaskSelectionPanel extends BasePanel {
      * @param sourceList The list view that triggered the selection
      */
     private void handleTaskSelection(Task task, ListView<Task> sourceList) {
-        selectedTask = task;
+        System.out.println("[DEBUG] Task selected: " + (task != null ? task.getName() : "null"));
 
-        // Clear selection from other list
+        this.selectedTask = task;
+
         if (sourceList == taskListView && recommendedListView != null) {
             recommendedListView.getSelectionModel().clearSelection();
         } else if (sourceList == recommendedListView && taskListView != null) {
@@ -514,6 +554,7 @@ public class TaskSelectionPanel extends BasePanel {
         }
 
         updateSelectionInfo();
+        selectButton.setDisable(selectedTask == null);
     }
 
     /**
@@ -526,44 +567,47 @@ public class TaskSelectionPanel extends BasePanel {
             return;
         }
 
+        // Build info text
         StringBuilder info = new StringBuilder();
         info.append("Selected: ").append(selectedTask.getName());
         info.append("\nPriority: ").append(selectedTask.getPriority().name());
 
+        // Add these missing details
         if (selectedTask.hasDueDateTime()) {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' HH:mm");
-            info.append("\nDue: ").append(selectedTask.getDueDateTime().format(formatter));
-
-            if (selectedTask.getDueDateTime().isBefore(LocalDateTime.now())) {
-                info.append(" (OVERDUE)");
-            }
+            info.append("\nDue: ").append(selectedTask.getDueDateTime().toLocalDate());
+        }
+        if (!selectedTask.getDescription().isEmpty()) {
+            info.append("\nDetails: ").append(selectedTask.getDescription());
         }
 
-        if (!selectedTask.getDescription().trim().isEmpty()) {
-            String desc = selectedTask.getDescription().trim();
-            if (desc.length() > 100) {
-                desc = desc.substring(0, 97) + "...";
-            }
-            info.append("\nDescription: ").append(desc);
-        }
-
-        selectedTaskInfo.setText(info.toString());
+        // Enable the select button and update info
         selectButton.setDisable(false);
+        selectedTaskInfo.setText(info.toString());
     }
 
     /**
      * Sets up keyboard shortcuts for efficient task selection.
      */
     private void setupKeyboardShortcuts() {
-        setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.ENTER) {
-                if (selectedTask != null) {
-                    selectCurrentTask();
+        // Add event filter to consume events meant for this panel
+        addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            // Only handle events if they're meant for components in this panel
+            if (e.getTarget() instanceof Node &&
+                    ((Node) e.getTarget()).getScene().getFocusOwner() != null &&
+                    isDescendant(getPanelRoot(), ((Node) e.getTarget()).getScene().getFocusOwner())) {
+
+                if (e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.SPACE) {
+                    if (selectedTask != null) {
+                        selectCurrentTask();
+                        e.consume(); // Prevent event from bubbling up
+                    }
+                } else if (e.getCode() == KeyCode.ESCAPE) {
+                    getOverlayManager().hideCurrentOverlay();
+                    e.consume();
+                } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
+                    createNewTask();
+                    e.consume();
                 }
-            } else if (e.getCode() == KeyCode.ESCAPE) {
-                getOverlayManager().hideCurrentOverlay();
-            } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
-                createNewTask();
             }
         });
 
@@ -571,13 +615,40 @@ public class TaskSelectionPanel extends BasePanel {
         searchField.requestFocus();
     }
 
+    private boolean isDescendant(Object panelRoot, Node focusOwner) {
+        if (focusOwner == null || !(panelRoot instanceof Parent)) {
+            return false;
+        }
+
+        Node current = focusOwner;
+        while (current != null) {
+            if (current == panelRoot) {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    private Parent getPanelRoot() {
+        // Return this panel as the root since TaskSelectionPanel extends BasePanel
+        // which is a Parent
+        return this;
+    }
+
     /**
      * Selects the current task and closes the panel.
      */
     private void selectCurrentTask() {
+        System.out.println("[TaskSelectionPanel] selectCurrentTask called");
+
         if (selectedTask != null) {
+            System.out.println("[TaskSelectionPanel] Selected task: " + selectedTask.getName());
             onTaskSelected.accept(selectedTask);
             getOverlayManager().hideCurrentOverlay();
+            System.out.println("[TaskSelectionPanel] Task selected and overlay closed");
+        } else {
+            System.out.println("[TaskSelectionPanel] No task selected");
         }
     }
 
