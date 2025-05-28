@@ -241,21 +241,24 @@ public class TimerPanel extends VBox {
             }
         });
 
-        // Set initial preferred size
-        setPrefSize(baseWidth, baseHeight);
+        // Set to use available space but respect height constraints
         setMaxHeight(Region.USE_PREF_SIZE);
+        setPrefHeight(Region.USE_COMPUTED_SIZE);
     }
 
     private void updateScaling(double availableWidth, double availableHeight) {
         if (availableWidth <= 0 || availableHeight <= 0)
             return;
 
-        // Calculate scale factor based on available space
-        double widthScale = Math.max(0.5, Math.min(2.0, availableWidth / baseWidth));
-        double heightScale = Math.max(0.5, Math.min(2.0, availableHeight / baseHeight));
+        // Calculate scale factor more aggressively based on available space
+        double widthScale = availableWidth / 600.0; // Base width for scaling
+        double heightScale = availableHeight / 400.0; // Base height for scaling
 
         // Use the smaller scale to maintain proportions
         scaleFactor = Math.min(widthScale, heightScale);
+
+        // Clamp the scale factor to reasonable bounds
+        scaleFactor = Math.max(0.3, Math.min(3.0, scaleFactor));
 
         // Apply responsive font sizes
         updateFontSizes();
@@ -264,39 +267,39 @@ public class TimerPanel extends VBox {
     }
 
     private void updateFontSizes() {
-        double taskFontSize = Math.max(12, 14 * scaleFactor);
+        double taskFontSize = Math.max(18, 32 * scaleFactor);
         currentTaskLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, taskFontSize));
 
-        double typeFontSize = Math.max(14, 18 * scaleFactor);
+        double typeFontSize = Math.max(24, 40 * scaleFactor);
         timerTypeLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, typeFontSize));
 
-        double timerFontSize = Math.max(24, 48 * scaleFactor);
+        double timerFontSize = Math.max(48, 120 * scaleFactor);
         timerLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, timerFontSize));
 
-        double remainingFontSize = Math.max(10, 14 * scaleFactor);
+        double remainingFontSize = Math.max(16, 28 * scaleFactor);
         remainingLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, remainingFontSize));
 
-        double buttonFontSize = Math.max(12, 16 * scaleFactor);
+        double buttonFontSize = Math.max(18, 32 * scaleFactor);
         selectTaskButton.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, buttonFontSize));
         startButton.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, buttonFontSize));
     }
 
     private void updatePadding() {
-        double paddingValue = Math.max(15, 30 * scaleFactor);
+        double paddingValue = Math.max(20, 60 * scaleFactor);
         setPadding(new Insets(paddingValue));
 
-        double displayPadding = Math.max(5, 10 * scaleFactor);
+        double displayPadding = Math.max(15, 30 * scaleFactor);
         timerDisplay.setPadding(new Insets(displayPadding));
     }
 
     private void updateSpacing() {
-        double mainSpacing = Math.max(10, 15 * scaleFactor);
+        double mainSpacing = Math.max(15, 45 * scaleFactor);
         setSpacing(mainSpacing);
 
-        double displaySpacing = Math.max(3, 5 * scaleFactor);
+        double displaySpacing = Math.max(8, 25 * scaleFactor);
         timerDisplay.setSpacing(displaySpacing);
 
-        double controlSpacing = Math.max(10, 15 * scaleFactor);
+        double controlSpacing = Math.max(15, 35 * scaleFactor);
         controlsContainer.setSpacing(controlSpacing);
     }
 
@@ -413,8 +416,8 @@ public class TimerPanel extends VBox {
     }
 
     private void updateButtonStyles() {
-        double buttonPadding = Math.max(8, 12 * scaleFactor);
-        double buttonMinWidth = Math.max(80, 120 * scaleFactor);
+        double buttonPadding = Math.max(12, 20 * scaleFactor);
+        double buttonMinWidth = Math.max(120, 200 * scaleFactor);
 
         // FIXED: Better button styling with proper disabled states
         String selectTaskStyle = String.format(

@@ -22,6 +22,7 @@ import com.focusflow.core.session.SessionManager;
 import com.focusflow.core.task.Task;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -34,7 +35,6 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -73,6 +73,7 @@ public class App extends Application {
 
     // UI Components
     private TimerPanel timerPanel;
+    private StackPane timerContainer;
     private ProgressBar progressBar;
     private Label questProgressLabel;
     private VBox bottomArea;
@@ -80,6 +81,9 @@ public class App extends Application {
     private ImageView soundIcon;
     private MediaPlayer backgroundMusic;
     private boolean isMuted = false;
+    private HBox topSection;
+    private VBox centerContainer;
+    private VBox mainLayout;
 
     @Override
     public void start(Stage stage) {
@@ -90,7 +94,13 @@ public class App extends Application {
         initializeManagers();
         setupBackgroundMusic();
 
-        mainScene = new Scene(createMainLayout(), 1070, 610);
+        // Create scene with initial layout
+        AnchorPane root = createMainLayout();
+        mainScene = new Scene(root, 1070, 610);
+
+        // Now that mainScene exists, set up responsive design
+        setupResponsiveDesign();
+
         stage.setScene(mainScene);
         stage.setTitle("FocusFlow");
 
@@ -102,7 +112,6 @@ public class App extends Application {
         }
 
         setupKeyboardShortcuts(mainScene);
-        setupResponsiveDesign();
         stage.show();
     }
 
@@ -130,71 +139,190 @@ public class App extends Application {
         AnchorPane root = new AnchorPane();
         setupBackground(root);
 
-        BorderPane unifiedLayout = new BorderPane();
+        // Create main VBox without spacing
+        mainLayout = new VBox(0);
+        mainLayout.setFillWidth(true);
+        mainLayout.setAlignment(Pos.BOTTOM_CENTER);
 
-        // LEFT: Sidebar
+        // Create bottom area with fixed size
+        bottomArea = createBottomArea();
+        bottomArea.setMinHeight(80);
+        bottomArea.setPrefHeight(80);
+        bottomArea.setMaxHeight(80);
+        VBox.setVgrow(bottomArea, Priority.NEVER);
+        bottomArea.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.95); -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 10, 0, 0, -5);");
+
+        // Top section
+        topSection = new HBox();
+        VBox.setVgrow(topSection, Priority.ALWAYS);
+        topSection.setMinHeight(Region.USE_PREF_SIZE);
+        topSection.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        topSection.setMaxHeight(Double.MAX_VALUE);
+
+        // Create sidebar and center container
         sidebar = createSimplifiedSidebar();
+        centerContainer = new VBox();
+        centerContainer.setAlignment(Pos.CENTER);
+        centerContainer.setFillWidth(true);
 
-        // CENTER: Main content with timer (NO overlay container here)
-        StackPane mainContent = new StackPane();
-
-        // Create TimerPanel with callbacks
+        // Initialize timer panel - IMPORTANT: Create this before setupResponsiveDesign
+        // is called
         timerPanel = new TimerPanel(
                 pixelFont,
                 (unused) -> showTaskSelectionOverlay(),
                 (unused) -> {
-                    /* Timer panel handles its own start/pause logic */ });
-        StackPane.setAlignment(timerPanel, Pos.TOP_CENTER);
+                    /* Timer panel handles its own start/pause logic */});
+        centerContainer.getChildren().add(timerPanel);
+        VBox.setVgrow(timerPanel, Priority.ALWAYS);
 
-        mainContent.getChildren().add(timerPanel); // Only timer, no overlay container
+        // Add components to top section
+        topSection.getChildren().addAll(sidebar, centerContainer);
+        HBox.setHgrow(centerContainer, Priority.ALWAYS);
 
-        // BOTTOM: Action bar
-        bottomArea = createBottomArea();
+        // Add sections to main layout
+        mainLayout.getChildren().addAll(topSection, bottomArea);
 
-        unifiedLayout.setLeft(sidebar);
-        unifiedLayout.setCenter(mainContent);
-        unifiedLayout.setBottom(bottomArea);
-
-        // CREATE OVERLAY CONTAINER AT ROOT LEVEL (covers everything)
-        StackPane overlayContainer = new StackPane();
-        overlayContainer.setVisible(false); // Hidden by default
-
-        // Initialize overlay manager
-        this.overlayManager = new OverlayManager(overlayContainer);
-
-        // Add both layout and overlay container to root
-        root.getChildren().addAll(unifiedLayout, overlayContainer);
-
-        // Position unifiedLayout
-        AnchorPane.setTopAnchor(unifiedLayout, 0.0);
-        AnchorPane.setBottomAnchor(unifiedLayout, 0.0);
-        AnchorPane.setLeftAnchor(unifiedLayout, 0.0);
-        AnchorPane.setRightAnchor(unifiedLayout, 0.0);
-
-        // Position overlay container to cover EVERYTHING
-        AnchorPane.setTopAnchor(overlayContainer, 0.0);
-        AnchorPane.setBottomAnchor(overlayContainer, 0.0);
-        AnchorPane.setLeftAnchor(overlayContainer, 0.0);
-        AnchorPane.setRightAnchor(overlayContainer, 0.0);
+        // Add main layout to root with anchors
+        root.getChildren().add(mainLayout);
+        AnchorPane.setTopAnchor(mainLayout, 0.0);
+        AnchorPane.setBottomAnchor(mainLayout, 0.0);
+        AnchorPane.setLeftAnchor(mainLayout, 0.0);
+        AnchorPane.setRightAnchor(mainLayout, 0.0);
 
         return root;
     }
 
     private void setupResponsiveDesign() {
         if (mainScene != null) {
-            // Sidebar responsive width
+            // Set minimum window size to prevent elements from overlapping
+            primaryStage.setMinWidth(600); // Minimum width that keeps UI readable
+            primaryStage.setMinHeight(400); // Minimum height that shows all elements
+
+            // Fix bottom area height
+            bottomArea.setMinHeight(80);
+            bottomArea.setPrefHeight(80);
+            bottomArea.setMaxHeight(80);
+
+            // Main layout takes scene height but respects minimum sizes
+            mainLayout.setMinHeight(300); // Minimum height to show timer + bottom area
+            mainLayout.prefHeightProperty().bind(mainScene.heightProperty());
+
+            // Top section fills remaining space exactly
+            topSection.prefHeightProperty().bind(
+                    Bindings.subtract(mainScene.heightProperty(), bottomArea.getHeight()));
+
+            // Sidebar width with minimum
+            sidebar.setMinWidth(100); // Minimum width for sidebar
             sidebar.prefWidthProperty().bind(
-                    Bindings.max(60, mainScene.widthProperty().multiply(0.08)));
+                    Bindings.max(
+                            100,
+                            mainScene.widthProperty().multiply(0.2)));
 
-            // TimerPanel responsive sizing
-            timerPanel.prefWidthProperty().bind(
-                    Bindings.min(600, mainScene.widthProperty().multiply(0.7)));
-            timerPanel.maxWidthProperty().bind(timerPanel.prefWidthProperty());
+            // Center container with minimum width
+            centerContainer.setMinWidth(400); // Minimum width for timer
+            centerContainer.prefWidthProperty().bind(
+                    Bindings.max(
+                            400,
+                            Bindings.subtract(mainScene.widthProperty(), sidebar.widthProperty())));
 
-            // Bottom area responsive height
-            bottomArea.prefHeightProperty().bind(
-                    Bindings.max(100, mainScene.heightProperty().multiply(0.15)));
+            // Timer panel with minimum size
+            timerPanel.setMinWidth(300);
+            timerPanel.setMinHeight(200);
+            timerPanel.maxHeightProperty().bind(
+                    Bindings.subtract(topSection.heightProperty(), 20));
+            timerPanel.maxWidthProperty().bind(
+                    Bindings.subtract(centerContainer.widthProperty(), 20));
+
+            setupSidebarResponsiveBindings();
+            setupBottomAreaResponsiveBindings();
+
+            // Update timer scaling when window changes
+            mainScene.widthProperty().addListener((obs, oldWidth, newWidth) -> updateTimerPanelScale());
+            mainScene.heightProperty().addListener((obs, oldHeight, newHeight) -> updateTimerPanelScale());
         }
+    }
+
+    private void updateTimerPanelScale() {
+        Platform.runLater(() -> {
+            // Calculate available space exactly
+            double availableWidth = mainScene.getWidth() - sidebar.getWidth();
+            double availableHeight = mainScene.getHeight() - bottomArea.getHeight();
+
+            // Scale factor based on available space with minimum scale
+            double scaleFactor = Math.max(0.4, Math.min(
+                    availableWidth / 1200.0,
+                    availableHeight / 800.0));
+
+            timerPanel.setScaleFactor(scaleFactor);
+        });
+    }
+
+    private void setupSidebarResponsiveBindings() {
+        // Responsive padding and spacing for sidebar
+        sidebar.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double padding = sidebar.getWidth() * 0.1;
+                    return new Insets(padding);
+                }, sidebar.widthProperty()));
+
+        sidebar.spacingProperty().bind(mainScene.heightProperty().multiply(0.05));
+
+        // Bind icon sizes to sidebar width
+        ImageView wallpaperIcon = (ImageView) ((Button) sidebar.getChildren().get(0)).getGraphic();
+        wallpaperIcon.fitWidthProperty().bind(sidebar.widthProperty().multiply(0.4));
+        wallpaperIcon.fitHeightProperty().bind(wallpaperIcon.fitWidthProperty());
+
+        soundIcon.fitWidthProperty().bind(sidebar.widthProperty().multiply(0.4));
+        soundIcon.fitHeightProperty().bind(soundIcon.fitWidthProperty());
+
+        ImageView helpIcon = (ImageView) ((Button) sidebar.getChildren().get(2)).getGraphic();
+        helpIcon.fitWidthProperty().bind(sidebar.widthProperty().multiply(0.4));
+        helpIcon.fitHeightProperty().bind(helpIcon.fitWidthProperty());
+    }
+
+    private void setupBottomAreaResponsiveBindings() {
+        // Responsive padding - smaller to prevent overflow
+        bottomArea.paddingProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double padding = Math.max(5, bottomArea.getHeight() * 0.05);
+                    return new Insets(padding);
+                }, bottomArea.heightProperty()));
+
+        bottomArea.spacingProperty().bind(
+                Bindings.max(5, bottomArea.heightProperty().multiply(0.04)));
+        // Get the action buttons container
+        HBox actionButtons = (HBox) bottomArea.getChildren().get(0);
+        actionButtons.spacingProperty().bind(bottomArea.widthProperty().multiply(0.03));
+
+        // Bind button sizes
+        for (javafx.scene.Node node : actionButtons.getChildren()) {
+            if (node instanceof Button) {
+                Button btn = (Button) node;
+                btn.prefWidthProperty().bind(bottomArea.widthProperty().multiply(0.15));
+                btn.prefHeightProperty().bind(
+                        Bindings.max(25, bottomArea.heightProperty().multiply(0.25)));
+                btn.fontProperty().bind(
+                        Bindings.createObjectBinding(() -> {
+                            double fontSize = Math.max(12, bottomArea.getHeight() * 0.08);
+                            return Font.font(pixelFont.getFamily(), FontWeight.BOLD, fontSize);
+                        }, bottomArea.heightProperty()));
+            }
+        }
+
+        // Bind progress area elements
+        HBox progressArea = (HBox) bottomArea.getChildren().get(1);
+        progressArea.spacingProperty().bind(bottomArea.widthProperty().multiply(0.03));
+
+        questProgressLabel.fontProperty().bind(
+                Bindings.createObjectBinding(() -> {
+                    double fontSize = Math.max(12, bottomArea.getHeight() * 0.1);
+                    return Font.font(pixelFont.getFamily(), fontSize);
+                }, bottomArea.heightProperty()));
+
+        progressBar.prefWidthProperty().bind(bottomArea.widthProperty().multiply(0.3));
+        progressBar.prefHeightProperty().bind(
+                Bindings.max(15, bottomArea.heightProperty().multiply(0.12)));
     }
 
     private void setupBackground(AnchorPane root) {
@@ -211,11 +339,37 @@ public class App extends Application {
     private VBox createBottomArea() {
         VBox bottomArea = new VBox();
         bottomArea.setAlignment(Pos.CENTER);
+        bottomArea.setStyle("-fx-background-color: rgba(255,255,255,0.95);");
         bottomArea.setPadding(new Insets(15));
         bottomArea.setSpacing(10);
 
+        // Timer controls
+        HBox timerControls = new HBox(25);
+        timerControls.setAlignment(Pos.CENTER);
+
+        Button selectTaskBtn = new Button("Select Task");
+        Button startTimerBtn = new Button("Start Timer");
+
+        // Style the buttons
+        String timerButtonStyle = "-fx-background-color: #4CAF50; -fx-text-fill: white; " +
+                "-fx-background-radius: 12; -fx-font-weight: bold; -fx-cursor: hand;";
+        selectTaskBtn.setStyle(timerButtonStyle.replace("#4CAF50", "#2196F3"));
+        startTimerBtn.setStyle(timerButtonStyle);
+
+        // Set initial sizes (will be bound later)
+        selectTaskBtn.setPrefWidth(120);
+        startTimerBtn.setPrefWidth(120);
+        selectTaskBtn.setPrefHeight(40);
+        startTimerBtn.setPrefHeight(40);
+
+        // Set button handlers
+        selectTaskBtn.setOnAction(e -> showTaskSelectionOverlay());
+        startTimerBtn.setOnAction(e -> timerPanel.startTimer());
+
+        timerControls.getChildren().addAll(selectTaskBtn, startTimerBtn);
+
         // Quick action buttons
-        HBox actionButtons = new HBox(15);
+        HBox actionButtons = new HBox(25);
         actionButtons.setAlignment(Pos.CENTER);
 
         Button addTaskBtn = new Button("+ Add Task");
@@ -223,14 +377,17 @@ public class App extends Application {
         Button questsBtn = new Button("🏆 Create Quest");
         Button statsBtn = new Button("📊 Stats");
 
-        String buttonStyle = "-fx-background-color: rgba(255,255,255,0.8); " +
-                "-fx-background-radius: 10; -fx-padding: 8 15; " +
-                "-fx-font-weight: bold; -fx-cursor: hand;";
+        // Style all buttons
+        Button[] buttons = { addTaskBtn, viewTasksBtn, questsBtn, statsBtn };
+        for (Button btn : buttons) {
+            btn.setPrefWidth(120);
+            btn.setPrefHeight(40);
+            btn.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, 14));
+            btn.setStyle("-fx-background-color: rgba(255,255,255,0.8); " +
+                    "-fx-background-radius: 12; -fx-font-weight: bold; -fx-cursor: hand;");
+        }
 
-        addTaskBtn.setStyle(buttonStyle + "-fx-background-color: #2196F3; -fx-text-fill: white;");
-        viewTasksBtn.setStyle(buttonStyle);
-        questsBtn.setStyle(buttonStyle);
-        statsBtn.setStyle(buttonStyle);
+        addTaskBtn.setStyle(addTaskBtn.getStyle() + "-fx-background-color: #2196F3; -fx-text-fill: white;");
 
         // Click handlers
         addTaskBtn.setOnAction(e -> showTaskCreationOverlay());
@@ -258,43 +415,63 @@ public class App extends Application {
 
         progressArea.getChildren().addAll(questProgressLabel, progressBar, xpLabel);
 
-        bottomArea.getChildren().addAll(actionButtons, progressArea);
+        // Add all sections to bottom area - order matters!
+        bottomArea.getChildren().addAll(timerControls, actionButtons, progressArea);
         return bottomArea;
     }
 
     private VBox createSimplifiedSidebar() {
-        VBox sidebar = new VBox(20);
+        VBox sidebar = new VBox();
         sidebar.setAlignment(Pos.CENTER);
-        sidebar.setPadding(new Insets(20, 10, 20, 10));
         sidebar.setStyle("-fx-background-color: rgba(0,0,0,0.1);");
+
+        // Use fixed initial spacing, will be updated after scene is created
+        sidebar.setPadding(new Insets(20, 10, 20, 10));
+        sidebar.setSpacing(30);
 
         String iconStyle = "-fx-cursor: hand; -fx-background-color: transparent;";
 
-        // Settings/wallpaper
-        ImageView wallpaperIcon = new ImageView(new Image(
-                getClass().getResource("/UI/BackgroundIcon.png").toString(), 30, 30, true, true));
+        // Settings/wallpaper - responsive icon (40% of sidebar width)
+        ImageView wallpaperIcon = new ImageView();
+        wallpaperIcon.setImage(new Image(getClass().getResource("/UI/BackgroundIcon.png").toString()));
+        wallpaperIcon.setPreserveRatio(true);
+        wallpaperIcon.setFitWidth(50); // Initial size, will be bound later
+        wallpaperIcon.setFitHeight(50);
+
         Button wallpaperBtn = new Button();
         wallpaperBtn.setGraphic(wallpaperIcon);
         wallpaperBtn.setStyle(iconStyle);
         wallpaperBtn.setOnAction(e -> showWallpaperSelection());
 
-        // Sound toggle
-        soundIcon = new ImageView(new Image(
-                getClass().getResource("/UI/sound.png").toString(), 30, 30, true, true));
+        // Sound toggle - responsive icon (40% of sidebar width)
+        soundIcon = new ImageView();
+        soundIcon.setImage(new Image(getClass().getResource("/UI/sound.png").toString()));
+        soundIcon.setPreserveRatio(true);
+        soundIcon.setFitWidth(50); // Initial size, will be bound later
+        soundIcon.setFitHeight(50);
+
         Button soundBtn = new Button();
         soundBtn.setGraphic(soundIcon);
         soundBtn.setStyle(iconStyle);
         soundBtn.setOnAction(e -> toggleSound());
 
-        // Info/help
-        ImageView helpIcon = new ImageView(new Image(
-                getClass().getResource("/UI/question.png").toString(), 30, 30, true, true));
+        // Info/help - responsive icon (40% of sidebar width)
+        ImageView helpIcon = new ImageView();
+        helpIcon.setImage(new Image(getClass().getResource("/UI/question.png").toString()));
+        helpIcon.setPreserveRatio(true);
+        helpIcon.setFitWidth(50); // Initial size, will be bound later
+        helpIcon.setFitHeight(50);
+
         Button helpBtn = new Button();
         helpBtn.setGraphic(helpIcon);
         helpBtn.setStyle(iconStyle);
         helpBtn.setOnAction(e -> showHelpOverlay());
 
         sidebar.getChildren().addAll(wallpaperBtn, soundBtn, helpBtn);
+
+        // Store references for later binding
+        this.sidebar = sidebar;
+
         return sidebar;
     }
 
@@ -463,13 +640,15 @@ public class App extends Application {
             if (backgroundMusic != null) {
                 backgroundMusic.play();
             }
-            soundIcon.setOpacity(1.0);
+            if (soundIcon != null)
+                soundIcon.setOpacity(1.0);
             userPreferences.setMusicEnabled(true);
         } else {
             if (backgroundMusic != null) {
                 backgroundMusic.pause();
             }
-            soundIcon.setOpacity(0.5);
+            if (soundIcon != null)
+                soundIcon.setOpacity(0.5);
             userPreferences.setMusicEnabled(false);
         }
         isMuted = !isMuted;
