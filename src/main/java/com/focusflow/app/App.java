@@ -84,6 +84,8 @@ public class App extends Application {
     private HBox topSection;
     private VBox centerContainer;
     private VBox mainLayout;
+    private Button selectTaskButton;
+    private Button startTimerButton;
 
     @Override
     public void start(Stage stage) {
@@ -97,6 +99,12 @@ public class App extends Application {
         // Create scene with initial layout
         AnchorPane root = createMainLayout();
         mainScene = new Scene(root, 1070, 610);
+
+        // Initialize overlay manager
+        setupOverlayManager(root);
+
+        // Setup timer state listener after timerPanel is created
+        setupTimerStateListener();
 
         // Now that mainScene exists, set up responsive design
         setupResponsiveDesign();
@@ -243,6 +251,24 @@ public class App extends Application {
         }
     }
 
+    private void setupOverlayManager(AnchorPane root) {
+        StackPane overlayContainer = new StackPane();
+        overlayContainer.setVisible(false);
+        overlayContainer.setMouseTransparent(false);
+
+        // Add overlay container to root
+        root.getChildren().add(overlayContainer);
+
+        // Position overlay container to cover entire scene
+        AnchorPane.setTopAnchor(overlayContainer, 0.0);
+        AnchorPane.setBottomAnchor(overlayContainer, 0.0);
+        AnchorPane.setLeftAnchor(overlayContainer, 0.0);
+        AnchorPane.setRightAnchor(overlayContainer, 0.0);
+
+        // Initialize overlay manager
+        this.overlayManager = new OverlayManager(overlayContainer);
+    }
+
     private void updateTimerPanelScale() {
         Platform.runLater(() -> {
             // Calculate available space exactly
@@ -343,12 +369,16 @@ public class App extends Application {
         bottomArea.setPadding(new Insets(15));
         bottomArea.setSpacing(10);
 
-        // Timer controls
+        // Timer controls - NOW CONNECTED TO TIMER PANEL
         HBox timerControls = new HBox(25);
         timerControls.setAlignment(Pos.CENTER);
 
         Button selectTaskBtn = new Button("Select Task");
         Button startTimerBtn = new Button("Start Timer");
+
+        // Store references to update later
+        this.selectTaskButton = selectTaskBtn;
+        this.startTimerButton = startTimerBtn;
 
         // Style the buttons
         String timerButtonStyle = "-fx-background-color: #4CAF50; -fx-text-fill: white; " +
@@ -362,13 +392,23 @@ public class App extends Application {
         selectTaskBtn.setPrefHeight(40);
         startTimerBtn.setPrefHeight(40);
 
-        // Set button handlers
-        selectTaskBtn.setOnAction(e -> showTaskSelectionOverlay());
-        startTimerBtn.setOnAction(e -> timerPanel.startTimer());
+        // FIXED: Connect button handlers to TimerPanel
+        selectTaskBtn.setOnAction(e -> {
+            System.out.println("[App] Select Task button clicked");
+            showTaskSelectionOverlay();
+        });
+
+        startTimerBtn.setOnAction(e -> {
+            System.out.println("[App] Start Timer button clicked");
+            if (timerPanel != null) {
+                timerPanel.handleStartPauseAction();
+                updateTimerControlButtons(); // Update button text after action
+            }
+        });
 
         timerControls.getChildren().addAll(selectTaskBtn, startTimerBtn);
 
-        // Quick action buttons
+        // Quick action buttons (unchanged)
         HBox actionButtons = new HBox(25);
         actionButtons.setAlignment(Pos.CENTER);
 
@@ -389,7 +429,7 @@ public class App extends Application {
 
         addTaskBtn.setStyle(addTaskBtn.getStyle() + "-fx-background-color: #2196F3; -fx-text-fill: white;");
 
-        // Click handlers
+        // Click handlers (unchanged)
         addTaskBtn.setOnAction(e -> showTaskCreationOverlay());
         viewTasksBtn.setOnAction(e -> showTaskManagementOverlay());
         questsBtn.setOnAction(e -> showQuestManagementOverlay());
@@ -397,7 +437,7 @@ public class App extends Application {
 
         actionButtons.getChildren().addAll(addTaskBtn, viewTasksBtn, questsBtn, statsBtn);
 
-        // Progress area
+        // Progress area (unchanged)
         HBox progressArea = new HBox(20);
         progressArea.setAlignment(Pos.CENTER);
 
@@ -415,9 +455,42 @@ public class App extends Application {
 
         progressArea.getChildren().addAll(questProgressLabel, progressBar, xpLabel);
 
-        // Add all sections to bottom area - order matters!
+        // Add all sections to bottom area
         bottomArea.getChildren().addAll(timerControls, actionButtons, progressArea);
         return bottomArea;
+    }
+
+    /**
+     * Updates the timer control buttons based on current timer state
+     */
+    private void updateTimerControlButtons() {
+        if (timerPanel == null || selectTaskButton == null || startTimerButton == null) {
+            return;
+        }
+
+        // Update start button text
+        startTimerButton.setText(timerPanel.getStartButtonText());
+
+        // Update button enabled states
+        selectTaskButton.setDisable(!timerPanel.isTaskSelectionEnabled());
+        startTimerButton.setDisable(!timerPanel.isStartButtonEnabled());
+
+        // Update button styles based on state
+        if (startTimerButton.isDisabled()) {
+            startTimerButton.setStyle("-fx-background-color: #CCCCCC; -fx-text-fill: #666666; " +
+                    "-fx-background-radius: 12; -fx-font-weight: bold;");
+        } else {
+            startTimerButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; " +
+                    "-fx-background-radius: 12; -fx-font-weight: bold; -fx-cursor: hand;");
+        }
+
+        if (selectTaskButton.isDisabled()) {
+            selectTaskButton.setStyle("-fx-background-color: #CCCCCC; -fx-text-fill: #666666; " +
+                    "-fx-background-radius: 12; -fx-font-weight: bold;");
+        } else {
+            selectTaskButton.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; " +
+                    "-fx-background-radius: 12; -fx-font-weight: bold; -fx-cursor: hand;");
+        }
     }
 
     private VBox createSimplifiedSidebar() {
@@ -553,7 +626,6 @@ public class App extends Application {
         overlayManager.showOverlay(helpPanel, OverlayManager.AnimationType.FADE_IN);
     }
 
-    // Callback methods
     private void onTaskSelected(Task task) {
         System.out.println("[App] onTaskSelected called with task: " + (task != null ? task.getName() : "null"));
 
@@ -568,10 +640,10 @@ public class App extends Application {
                 timerPanel.forceWorkMode();
             }
 
-            // Don't automatically start the timer - let user click START button
+            // Update the control buttons
+            updateTimerControlButtons();
 
             System.out.println("[App] Task selection complete, user can now start timer");
-
             updateQuestProgress();
         } else {
             System.out.println("[App] No task was selected");
@@ -579,6 +651,65 @@ public class App extends Application {
 
         // Close the overlay
         overlayManager.hideCurrentOverlay();
+    }
+
+    private void setupTimerStateListener() {
+        if (timerPanel != null) {
+            // Add listeners to both timers to update buttons when state changes
+            timerPanel.getWorkTimer().addListener(new com.focusflow.core.timer.TimerEventListener.Adapter() {
+                @Override
+                public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+            });
+
+            timerPanel.getBreakTimer().addListener(new com.focusflow.core.timer.TimerEventListener.Adapter() {
+                @Override
+                public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+
+                @Override
+                public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
+                    Platform.runLater(() -> updateTimerControlButtons());
+                }
+            });
+        }
     }
 
     private void onTasksUpdated(Runnable callback) {

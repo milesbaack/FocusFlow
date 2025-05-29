@@ -10,9 +10,7 @@ import com.focusflow.core.timer.TimerType;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -20,8 +18,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
 /**
- * FIXED Timer Panel that handles all timer GUI logic and layout.
- * Fixed issues with button interactions and timer state management.
+ * FIXED Timer Panel that handles timer display without control buttons.
+ * Control buttons are now managed by App.java in the bottom area.
  */
 public class TimerPanel extends VBox {
 
@@ -36,19 +34,14 @@ public class TimerPanel extends VBox {
     private Task currentTask;
     private boolean isOnBreak = false;
 
-    // UI Components
+    // UI Components - ONLY display elements, no buttons
     private Label currentTaskLabel;
     private Label timerTypeLabel;
     private Label timerLabel;
     private Label remainingLabel;
-    private Button selectTaskButton;
-    private Button startButton;
-    private HBox controlsContainer;
     private VBox timerDisplay;
 
     // Responsive sizing properties
-    private double baseWidth = 400;
-    private double baseHeight = 200;
     private double scaleFactor = 1.0;
 
     // Styling constants
@@ -76,21 +69,21 @@ public class TimerPanel extends VBox {
         workTimer = new PomodoroTimer(TimerType.WORK, 25 * 60);
         breakTimer = new PomodoroTimer(TimerType.SHORT_BREAK, 5 * 60);
 
-        // Add listeners for timer events
+        // Add listeners for timer events - NO button updates, just state logging
         workTimer.addListener(new com.focusflow.core.timer.TimerEventListener() {
             @Override
             public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Work timer started"));
             }
 
             @Override
             public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Work timer paused"));
             }
 
             @Override
             public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Work timer resumed"));
             }
 
             @Override
@@ -98,14 +91,14 @@ public class TimerPanel extends VBox {
                 Platform.runLater(() -> {
                     switchToBreakMode();
                     breakTimer.start();
-                    updateButtonStates();
                     updateTimerDisplay();
+                    logTimerState("Work timer completed, break started");
                 });
             }
 
             @Override
             public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Work timer stopped"));
             }
 
             @Override
@@ -115,38 +108,38 @@ public class TimerPanel extends VBox {
 
             @Override
             public void onTimerReset(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Work timer reset"));
             }
         });
 
         breakTimer.addListener(new com.focusflow.core.timer.TimerEventListener() {
             @Override
             public void onTimerStarted(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Break timer started"));
             }
 
             @Override
             public void onTimerPaused(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Break timer paused"));
             }
 
             @Override
             public void onTimerResumed(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Break timer resumed"));
             }
 
             @Override
             public void onTimerCompleted(com.focusflow.core.timer.Timer timer) {
                 Platform.runLater(() -> {
                     switchToWorkMode();
-                    updateButtonStates();
                     updateTimerDisplay();
+                    logTimerState("Break timer completed, switched to work mode");
                 });
             }
 
             @Override
             public void onTimerStopped(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Break timer stopped"));
             }
 
             @Override
@@ -156,7 +149,7 @@ public class TimerPanel extends VBox {
 
             @Override
             public void onTimerReset(com.focusflow.core.timer.Timer timer) {
-                Platform.runLater(() -> updateButtonStates());
+                Platform.runLater(() -> logTimerState("Break timer reset"));
             }
         });
     }
@@ -190,41 +183,10 @@ public class TimerPanel extends VBox {
 
         timerDisplay.getChildren().addAll(timerTypeLabel, timerLabel, remainingLabel);
 
-        // FIXED: Control buttons with basic JavaFX button creation
-        controlsContainer = new HBox(15);
-        controlsContainer.setAlignment(Pos.CENTER);
+        // Only timer display - no control buttons
+        getChildren().addAll(currentTaskLabel, timerDisplay);
 
-        // Create buttons with minimal styling first
-        selectTaskButton = new Button("Select Task");
-        startButton = new Button("START");
-
-        // Set basic styles that we know work
-        selectTaskButton.setStyle("-fx-font-size: 14px; -fx-padding: 10px 20px;");
-        startButton.setStyle("-fx-font-size: 14px; -fx-padding: 10px 20px;");
-
-        // Add event handlers AFTER style setting
-        selectTaskButton.setOnAction(e -> {
-            System.out.println("[TimerPanel] SELECT TASK CLICKED!");
-            if (onSelectTask != null) {
-                System.out.println("[TimerPanel] Calling onSelectTask callback");
-                onSelectTask.accept(null);
-            } else {
-                System.out.println("[TimerPanel] onSelectTask callback is null!");
-            }
-        });
-
-        startButton.setOnAction(e -> {
-            System.out.println("[TimerPanel] START BUTTON CLICKED!");
-            handleStartButtonClick();
-        });
-
-        controlsContainer.getChildren().addAll(selectTaskButton, startButton);
-
-        getChildren().addAll(currentTaskLabel, timerDisplay, controlsContainer);
-
-        // Add debug output
-        System.out.println("[TimerPanel] Buttons created with handlers");
-        System.out.println("[TimerPanel] TimerPanel children count: " + getChildren().size());
+        System.out.println("[TimerPanel] Timer display created without control buttons");
     }
 
     private void setupResponsiveLayout() {
@@ -250,9 +212,9 @@ public class TimerPanel extends VBox {
         if (availableWidth <= 0 || availableHeight <= 0)
             return;
 
-        // Calculate scale factor more aggressively based on available space
-        double widthScale = availableWidth / 600.0; // Base width for scaling
-        double heightScale = availableHeight / 400.0; // Base height for scaling
+        // Calculate scale factor based on available space
+        double widthScale = availableWidth / 600.0;
+        double heightScale = availableHeight / 400.0;
 
         // Use the smaller scale to maintain proportions
         scaleFactor = Math.min(widthScale, heightScale);
@@ -260,7 +222,7 @@ public class TimerPanel extends VBox {
         // Clamp the scale factor to reasonable bounds
         scaleFactor = Math.max(0.3, Math.min(3.0, scaleFactor));
 
-        // Apply responsive font sizes
+        // Apply responsive sizing
         updateFontSizes();
         updatePadding();
         updateSpacing();
@@ -278,10 +240,6 @@ public class TimerPanel extends VBox {
 
         double remainingFontSize = Math.max(16, 28 * scaleFactor);
         remainingLabel.setFont(Font.font(pixelFont.getFamily(), FontWeight.NORMAL, remainingFontSize));
-
-        double buttonFontSize = Math.max(18, 32 * scaleFactor);
-        selectTaskButton.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, buttonFontSize));
-        startButton.setFont(Font.font(pixelFont.getFamily(), FontWeight.BOLD, buttonFontSize));
     }
 
     private void updatePadding() {
@@ -298,53 +256,18 @@ public class TimerPanel extends VBox {
 
         double displaySpacing = Math.max(8, 25 * scaleFactor);
         timerDisplay.setSpacing(displaySpacing);
-
-        double controlSpacing = Math.max(15, 35 * scaleFactor);
-        controlsContainer.setSpacing(controlSpacing);
     }
 
-    // FIXED: Simplified button click handler
-    private void handleStartButtonClick() {
-        System.out.println(
-                "[TimerPanel] handleStartButtonClick: isOnBreak=" + isOnBreak + ", currentTask=" + currentTask);
-
+    // Helper method for logging timer state changes
+    private void logTimerState(String message) {
         PomodoroTimer currentTimer = getCurrentTimer();
-        System.out.println("[TimerPanel] currentTimer state: " + currentTimer.getState());
-
-        if (currentTimer.getState() == TimerState.RUNNING) {
-            // Timer is running, pause it
-            currentTimer.pause();
-            System.out.println("[TimerPanel] Timer paused");
-        } else {
-            // Timer is paused or stopped, try to start/resume it
-            if (!isOnBreak && currentTask == null) {
-                // Can't start work timer without a task - show task selection
-                System.out.println("[TimerPanel] No task selected, showing task selection");
-                if (onSelectTask != null) {
-                    onSelectTask.accept(null);
-                }
-                return;
-            }
-
-            if (currentTimer.getState() == TimerState.PAUSED) {
-                currentTimer.resume();
-                System.out.println("[TimerPanel] Timer resumed");
-            } else {
-                currentTimer.start();
-                System.out.println("[TimerPanel] Timer started");
-            }
-        }
-
-        // Notify parent component if needed
-        if (onToggleTimer != null) {
-            onToggleTimer.accept(null);
-        }
+        TimerState state = currentTimer.getState();
+        System.out.println("[TimerPanel] " + message + " - state=" + state + 
+                          ", isOnBreak=" + isOnBreak + 
+                          ", currentTask=" + (currentTask != null ? currentTask.getName() : "null"));
     }
 
-    private PomodoroTimer getCurrentTimer() {
-        return isOnBreak ? breakTimer : workTimer;
-    }
-
+    // Timer mode switching methods
     private void switchToWorkMode() {
         isOnBreak = false;
         timerTypeLabel.setText("WORK SESSION");
@@ -379,104 +302,11 @@ public class TimerPanel extends VBox {
         timerLabel.setTextFill(timerColor);
     }
 
-    // FIXED: Clearer button state management
-    private void updateButtonStates() {
-        PomodoroTimer currentTimer = getCurrentTimer();
-        TimerState state = currentTimer.getState();
-
-        System.out.println("[TimerPanel] updateButtonStates: state=" + state + ", isOnBreak=" + isOnBreak
-                + ", currentTask=" + (currentTask != null ? currentTask.getName() : "null"));
-
-        // Update start button text and state
-        switch (state) {
-            case RUNNING:
-                startButton.setText("PAUSE");
-                startButton.setDisable(false);
-                break;
-            case PAUSED:
-                startButton.setText("RESUME");
-                startButton.setDisable(false);
-                break;
-            default:
-                startButton.setText("START");
-                // Only disable if we're in work mode and have no task
-                boolean shouldDisable = !isOnBreak && currentTask == null;
-                startButton.setDisable(shouldDisable);
-                System.out.println("[TimerPanel] Start button disabled: " + shouldDisable);
-                break;
-        }
-
-        // Update select task button state
-        // Disable during timer running or break mode
-        boolean selectTaskDisabled = isOnBreak || state == TimerState.RUNNING;
-        selectTaskButton.setDisable(selectTaskDisabled);
-        System.out.println("[TimerPanel] Select task button disabled: " + selectTaskDisabled);
-
-        updateButtonStyles();
-    }
-
-    private void updateButtonStyles() {
-        double buttonPadding = Math.max(12, 20 * scaleFactor);
-        double buttonMinWidth = Math.max(120, 200 * scaleFactor);
-
-        // FIXED: Better button styling with proper disabled states
-        String selectTaskStyle = String.format(
-                "-fx-background-color: %s; -fx-text-fill: white; " +
-                        "-fx-background-radius: 15; -fx-padding: %.0f 20; " +
-                        "-fx-font-weight: bold; -fx-min-width: %.0f; -fx-cursor: hand;",
-                selectTaskButton.isDisabled() ? "#CCCCCC" : WORK_TIMER_COLOR,
-                buttonPadding, buttonMinWidth);
-
-        String startButtonStyle = String.format(
-                "-fx-background-color: %s; -fx-text-fill: %s; " +
-                        "-fx-background-radius: 15; -fx-padding: %.0f 20; " +
-                        "-fx-font-weight: bold; -fx-min-width: %.0f; " +
-                        "-fx-border-color: #DDD; -fx-border-radius: 15; -fx-cursor: hand;",
-                startButton.isDisabled() ? "#F5F5F5" : "white",
-                startButton.isDisabled() ? "#999999" : "black",
-                buttonPadding, buttonMinWidth);
-
-        selectTaskButton.setStyle(selectTaskStyle);
-        startButton.setStyle(startButtonStyle);
-
-        // Add hover effects only for enabled buttons
-        addButtonHoverEffects();
-    }
-
-    private void addButtonHoverEffects() {
-        // Select Task button hover
-        selectTaskButton.setOnMouseEntered(e -> {
-            if (!selectTaskButton.isDisabled()) {
-                selectTaskButton.setStyle(selectTaskButton.getStyle() +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);");
-            }
-        });
-
-        selectTaskButton.setOnMouseExited(e -> {
-            selectTaskButton.setStyle(selectTaskButton.getStyle().replace(
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);", ""));
-        });
-
-        // Start button hover
-        startButton.setOnMouseEntered(e -> {
-            if (!startButton.isDisabled()) {
-                startButton.setStyle(startButton.getStyle() +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);");
-            }
-        });
-
-        startButton.setOnMouseExited(e -> {
-            startButton.setStyle(startButton.getStyle().replace(
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);", ""));
-        });
-    }
-
     private void updateTimerDisplay() {
         PomodoroTimer currentTimer = getCurrentTimer();
         int remainingTime = currentTimer.getRemainingTime();
 
         updateTimeDisplay(remainingTime);
-        updateButtonStates();
 
         // Update task label
         if (currentTask != null) {
@@ -493,6 +323,76 @@ public class TimerPanel extends VBox {
     }
 
     // Public API methods for external control
+
+    /**
+     * Handles start/pause/resume logic externally controlled
+     */
+    public void handleStartPauseAction() {
+        System.out.println("[TimerPanel] handleStartPauseAction called from external control");
+
+        PomodoroTimer currentTimer = getCurrentTimer();
+        System.out.println("[TimerPanel] currentTimer state: " + currentTimer.getState());
+
+        if (currentTimer.getState() == TimerState.RUNNING) {
+            // Timer is running, pause it
+            currentTimer.pause();
+            System.out.println("[TimerPanel] Timer paused");
+        } else {
+            // Timer is paused or stopped, try to start/resume it
+            if (!isOnBreak && currentTask == null) {
+                // Can't start work timer without a task
+                System.out.println("[TimerPanel] Cannot start - no task selected");
+                return;
+            }
+
+            if (currentTimer.getState() == TimerState.PAUSED) {
+                currentTimer.resume();
+                System.out.println("[TimerPanel] Timer resumed");
+            } else {
+                currentTimer.start();
+                System.out.println("[TimerPanel] Timer started");
+            }
+        }
+
+        // Notify parent component if needed
+        if (onToggleTimer != null) {
+            onToggleTimer.accept(null);
+        }
+    }
+
+    /**
+     * Gets the current button text that should be displayed
+     */
+    public String getStartButtonText() {
+        PomodoroTimer currentTimer = getCurrentTimer();
+        TimerState state = currentTimer.getState();
+
+        switch (state) {
+            case RUNNING:
+                return "PAUSE";
+            case PAUSED:
+                return "RESUME";
+            default:
+                return "START";
+        }
+    }
+
+    /**
+     * Checks if the start button should be enabled
+     */
+    public boolean isStartButtonEnabled() {
+        // Only disable if we're in work mode and have no task
+        return isOnBreak || currentTask != null;
+    }
+
+    /**
+     * Checks if task selection should be enabled
+     */
+    public boolean isTaskSelectionEnabled() {
+        // Disable during timer running or break mode
+        TimerState state = getCurrentTimer().getState();
+        return !isOnBreak && state != TimerState.RUNNING;
+    }
 
     public void setCurrentTask(Task task) {
         System.out.println("[TimerPanel] setCurrentTask: " + (task != null ? task.getName() : "null"));
@@ -511,7 +411,6 @@ public class TimerPanel extends VBox {
         return currentTask;
     }
 
-    // FIXED: Simplified timer control methods
     public void startTimer() {
         System.out.println("[TimerPanel] startTimer called");
         PomodoroTimer currentTimer = getCurrentTimer();
@@ -579,10 +478,13 @@ public class TimerPanel extends VBox {
         updateFontSizes();
         updatePadding();
         updateSpacing();
-        updateButtonStyles();
     }
 
     public double getScaleFactor() {
         return scaleFactor;
+    }
+
+    private PomodoroTimer getCurrentTimer() {
+        return isOnBreak ? breakTimer : workTimer;
     }
 }
