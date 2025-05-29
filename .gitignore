@@ -28,3 +28,4 @@ AppDebug.java
 #java custom-jre
 custom-jre/lib/modules
 out/FocusFlow/lib/libjfxwebkit.so
+out/
