@@ -1,0 +1,144 @@
+@startuml FocusFlow Architecture
+
+' Style settings
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 100
+
+' Title
+title FocusFlow - Application Architecture
+
+' Core Components
+package "Core" {
+    package "Timer" {
+        class TimerType {
+            + WORK
+            + SHORT_BREAK
+            + LONG_BREAK
+        }
+        
+        class PomodoroTimer {
+            - TimerType type
+            - int duration
+            - boolean running
+            + start()
+            + pause()
+            + reset()
+            + getRemainingTime()
+        }
+        
+        interface TimerEventListener {
+            + onTimerStart(Timer)
+            + onTimerPause(Timer)
+            + onTimerComplete(Timer)
+            + onTimerTick(Timer, int)
+            + onTimerReset(Timer)
+        }
+    }
+    
+    package "Task" {
+        class Task {
+            - String title
+            - String description
+            - boolean completed
+            - int estimatedPomodoros
+            - int completedPomodoros
+            + markComplete()
+            + updateProgress()
+        }
+        
+        class TaskManager {
+            - List<Task> tasks
+            + addTask(Task)
+            + removeTask(Task)
+            + getTasks()
+            + updateTask(Task)
+        }
+    }
+    
+    package "Session" {
+        class Session {
+            - LocalDateTime startTime
+            - LocalDateTime endTime
+            - TimerType type
+            - Task associatedTask
+            + start()
+            + end()
+            + getDuration()
+        }
+        
+        class SessionManager {
+            - List<Session> sessions
+            + startSession(Task, TimerType)
+            + endSession()
+            + getSessionHistory()
+        }
+    }
+    
+    package "Analytics" {
+        class Analytics {
+            + calculateProductivity()
+            + getSessionStats()
+            + getTaskCompletionRate()
+        }
+    }
+    
+    package "Gameify" {
+        class Achievement {
+            - String name
+            - String description
+            - boolean unlocked
+        }
+        
+        class Reward {
+            - String name
+            - int points
+            + unlock()
+        }
+    }
+}
+
+' UI Components
+package "UI" {
+    class MainView {
+        + initializeUI()
+        + updateTimerDisplay()
+        + updateTaskList()
+    }
+    
+    class TaskView {
+        + showTaskDetails()
+        + editTask()
+    }
+    
+    class TimerView {
+        + showTimer()
+        + updateProgress()
+    }
+    
+    class AnalyticsView {
+        + showProductivityStats()
+        + showAchievements()
+    }
+}
+
+' Relationships
+TimerType "1" -- "1" PomodoroTimer
+PomodoroTimer ..|> TimerEventListener
+Task "1" -- "*" Session
+SessionManager "1" -- "*" Session
+TaskManager "1" -- "*" Task
+Analytics "1" -- "*" Session
+Gameify "1" -- "*" Achievement
+Gameify "1" -- "*" Reward
+
+MainView --> TaskView
+MainView --> TimerView
+MainView --> AnalyticsView
+MainView --> PomodoroTimer
+MainView --> TaskManager
+MainView --> SessionManager
+
+@enduml 
