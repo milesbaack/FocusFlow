@@ -17,17 +17,18 @@ FocusFlow addresses this challenge by creating an integrated productivity ecosys
 
 ## ✨ Features
 
-### 📋 Task Management
-- **Task Creation & Organization** - Create, edit, and delete tasks with customizable priorities
-- **ToDo List Tracking** - Monitor completion status and view task history
-- **Subtasks Support** - Break down complex tasks into manageable subtasks
-- **Categories** - Organize tasks by custom categories with color coding
-
 ### ⏱️ Pomodoro Timer
 - **25/5 Work/Break Intervals** - Scientifically proven focus enhancement technique
 - **Session Counter** - Track your daily and weekly focus sessions
 - **Distraction List** - Quickly capture distracting thoughts during focus sessions and address them during breaks
 - **Intelligent Break Reminders** - Get suggestions for break activities based on your distraction list
+
+
+### 📋 Task Management
+- **Task Creation & Organization** - Create, edit, and delete tasks with customizable priorities
+- **ToDo List Tracking** - Monitor completion status and view task history
+- **Subtasks Support** - Break down complex tasks into manageable subtasks
+- **Categories** - Organize tasks by custom categories with color coding
 
 ### 🎮 Gamification
 - **XP & Level System** - Earn experience points and level up by completing tasks and focus sessions
