@@ -16,7 +16,9 @@
 - Add the JDK `bin` directory to your system `PATH`.
 
 ### 2. Install JavaFX SDK
-- Download JavaFX SDK 21.0.7 and extract it to a directory, e.g., `C:\Users\email\javafx-sdk-21.0.7`.
+- Download JavaFX SDK 21.0.7 from the link above.
+- Extract the downloaded archive to a directory of your choice (e.g., `C:\javafx-sdk-21.0.7`).
+- Ensure you remember the path where you extracted the JavaFX SDK, as you will need it to run the application.
 
 ### 3. Install Maven
 - Download and extract Maven.
@@ -24,7 +26,7 @@
 
 ### 4. Clone the Repository
 ```sh
-git clone <your-repo-url>
+git clone https://github.com/milesbaack/FocusFlow.git
 cd FocusFlow
 ```
 
@@ -44,7 +46,7 @@ cd FocusFlow
 Run the following command (replace the path if your JavaFX SDK is elsewhere):
 
 ```sh
-java --module-path "C:\Users\email\javafx-sdk-21.0.7\lib" --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.base,javafx.media -jar target/focusflow-1.0-SNAPSHOT-shaded.jar
+java --module-path "[path to JavaFX sdk]" --add-modules javafx.controls,javafx.fxml,javafx.graphics,javafx.base,javafx.media -jar target/focusflow-1.0-SNAPSHOT-shaded.jar
 ```
 
 ### If JavaFX is on your system path (advanced users):
