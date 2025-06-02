@@ -29,17 +29,17 @@ FocusFlow addresses this challenge by creating an integrated productivity ecosys
 - **Distraction List** - Quickly capture distracting thoughts during focus sessions and address them during breaks
 - **Intelligent Break Reminders** - Get suggestions for break activities based on your distraction list
 
-### 📊 Analytics & Insights
-- **Task Completion Metrics** - Track your productivity patterns over time
-- **Focus Session Recording** - Analyze your focus habits and identify improvement opportunities
-- **Visual Statistics** - Intuitive charts and graphs showing your productivity trends
-- **Progress Reports** - Understand your productivity patterns with detailed insights
-
 ### 🎮 Gamification
 - **XP & Level System** - Earn experience points and level up by completing tasks and focus sessions
 - **Achievements** - Unlock achievements for reaching productivity milestones
 - **Quests & Challenges** - Complete time-bound missions for special rewards
 - **Progress Tracking** - Visual representation of your productivity journey
+
+### 📊 Analytics & Insights
+- **Task Completion Metrics** - Track your productivity patterns over time
+- **Focus Session Recording** - Analyze your focus habits and identify improvement opportunities
+- **Visual Statistics** - Intuitive charts and graphs showing your productivity trends
+- **Progress Reports** - Understand your productivity patterns with detailed insights
 
 ### 🧠 Focus Enhancement Tools
 - **White Noise Player** - Ambient sounds to help you concentrate
