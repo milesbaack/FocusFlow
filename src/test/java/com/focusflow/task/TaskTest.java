@@ -15,8 +15,8 @@ import com.focusflow.core.task.Task;
 public class TaskTest {
     @Test
     public void testTaskCreation() {
-        Task task = new Task("Test title");
-        assertEquals("Test title", task.getTitle());
-        assertFalse(task.isCompleted());
+        Task task = new Task("Test title", "Test description");
+        assertEquals("Test title", task.getName());
+        assertFalse(task.isComplete());
     }
 }
