@@ -1,4 +1,4 @@
-# 🌊 FocusFlow
+# 🌊 FocusFlow (migrating from JavaFX to Flutter)
 
 <p>
   <img src="https://github.com/user-attachments/assets/9d8f3f73-7251-4498-a4e5-ddc19a6c8dd1" width="30%">
